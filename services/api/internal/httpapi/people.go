@@ -1,22 +1,23 @@
-package api
+package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/kabeerx9/decio-update/services/api/internal/domain"
 )
 
-var ErrProfileNotFound = errors.New("profile not found")
-
-type PeoplePage struct {
-	People     []Profile `json:"people"`
-	NextCursor string    `json:"nextCursor"`
+type PeopleStore interface {
+	SearchPeople(ctx context.Context, viewerID, query, cursor string) (domain.PeoplePage, error)
+	PublicProfile(ctx context.Context, id string) (domain.Profile, error)
 }
 
-func registerPeopleRoutes(mux *http.ServeMux, profiles ProfileStore, authenticate Middleware) {
+func registerPeopleRoutes(mux *http.ServeMux, profiles PeopleStore, authenticate Middleware) {
 	mux.Handle("GET /v1/people", authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		viewerID, ok := userID(r.Context())
@@ -48,7 +49,7 @@ func registerPeopleRoutes(mux *http.ServeMux, profiles ProfileStore, authenticat
 			return
 		}
 		profile, err := profiles.PublicProfile(r.Context(), r.PathValue("id"))
-		if errors.Is(err, ErrProfileNotFound) {
+		if errors.Is(err, domain.ErrProfileNotFound) {
 			http.Error(w, "profile not found", http.StatusNotFound)
 			return
 		}

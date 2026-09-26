@@ -1,4 +1,4 @@
-package store
+package postgres
 
 import (
 	"context"
@@ -8,17 +8,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kabeerx9/decio-update/services/api/internal/api"
+	"github.com/kabeerx9/decio-update/services/api/internal/domain"
 )
 
 func TestCityPostsScopePaginationAndPhoto(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
 	if databaseURL == "" {
-		t.Skip("set TEST_DATABASE_URL for Postgres integration test")
+		t.Skip("set TEST_DATABASE_URL for Store integration test")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	store, err := NewPostgres(ctx, databaseURL)
+	store, err := New(ctx, databaseURL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,14 +32,14 @@ func TestCityPostsScopePaginationAndPhoto(t *testing.T) {
 		_, _ = store.pool.Exec(cleanup, `DELETE FROM profiles WHERE id = ANY($1)`, []string{author, neighbor, outsider, blank})
 	})
 	for _, person := range []struct{ id, city string }{{author, "Mumbai"}, {neighbor, "mumbai"}, {outsider, "Delhi"}} {
-		if _, err := store.Update(ctx, person.id, api.ProfileInput{DisplayName: person.id, City: person.city, Interests: []string{}}); err != nil {
+		if _, err := store.Update(ctx, person.id, domain.ProfileInput{DisplayName: person.id, City: person.city, Interests: []string{}}); err != nil {
 			t.Fatal(err)
 		}
 	}
 	if _, err := store.FindOrCreate(ctx, blank); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.CreatePost(ctx, blank, "bad", nil, ""); !errors.Is(err, api.ErrProfileIncomplete) {
+	if _, err := store.CreatePost(ctx, blank, "bad", nil, ""); !errors.Is(err, domain.ErrProfileIncomplete) {
 		t.Fatalf("blank profile: %v", err)
 	}
 	page, err := store.ListPosts(ctx, blank, "")
@@ -78,16 +78,16 @@ func TestCityPostsScopePaginationAndPhoto(t *testing.T) {
 	if err != nil || string(data) != "image data" || kind != "image/jpeg" {
 		t.Fatalf("same-city photo: %q %q %v", data, kind, err)
 	}
-	if _, _, err := store.PostPhoto(ctx, outsider, photoID); !errors.Is(err, api.ErrPostNotFound) {
+	if _, _, err := store.PostPhoto(ctx, outsider, photoID); !errors.Is(err, domain.ErrPostNotFound) {
 		t.Fatalf("cross-city photo: %v", err)
 	}
-	if _, _, err := store.PostPhoto(ctx, blank, photoID); !errors.Is(err, api.ErrPostNotFound) {
+	if _, _, err := store.PostPhoto(ctx, blank, photoID); !errors.Is(err, domain.ErrPostNotFound) {
 		t.Fatalf("blank-city photo: %v", err)
 	}
-	if _, err := store.Update(ctx, neighbor, api.ProfileInput{DisplayName: neighbor, City: "Delhi", Interests: []string{}}); err != nil {
+	if _, err := store.Update(ctx, neighbor, domain.ProfileInput{DisplayName: neighbor, City: "Delhi", Interests: []string{}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := store.PostPhoto(ctx, neighbor, photoID); !errors.Is(err, api.ErrPostNotFound) {
+	if _, _, err := store.PostPhoto(ctx, neighbor, photoID); !errors.Is(err, domain.ErrPostNotFound) {
 		t.Fatalf("moved-city photo: %v", err)
 	}
 }

@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/clerk/clerk-sdk-go/v2"
-	"github.com/kabeerx9/decio-update/services/api/internal/api"
-	"github.com/kabeerx9/decio-update/services/api/internal/store"
+	"github.com/kabeerx9/decio-update/services/api/internal/httpapi"
+	"github.com/kabeerx9/decio-update/services/api/internal/postgres"
 )
 
 func main() {
@@ -23,15 +23,15 @@ func main() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	profiles, err := store.NewPostgres(ctx, databaseURL)
+	storage, err := postgres.New(ctx, databaseURL)
 	if err != nil {
 		log.Fatalf("connect database: %v", err)
 	}
-	defer profiles.Close()
+	defer storage.Close()
 
 	server := &http.Server{
 		Addr:              ":" + port,
-		Handler:           api.AllowOrigins(strings.Split(os.Getenv("CORS_ALLOWED_ORIGINS"), ","))(api.NewHandler(profiles, api.ClerkAuth())),
+		Handler:           httpapi.AllowOrigins(strings.Split(os.Getenv("CORS_ALLOWED_ORIGINS"), ","))(httpapi.NewHandler(storage, httpapi.ClerkAuth())),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	log.Printf("API listening on :%s", port)

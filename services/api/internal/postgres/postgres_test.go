@@ -1,4 +1,4 @@
-package store
+package postgres
 
 import (
 	"context"
@@ -8,17 +8,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kabeerx9/decio-update/services/api/internal/api"
+	"github.com/kabeerx9/decio-update/services/api/internal/domain"
 )
 
 func TestFindOrCreateKeepsProfilesSeparate(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
 	if databaseURL == "" {
-		t.Skip("set TEST_DATABASE_URL for Postgres integration test")
+		t.Skip("set TEST_DATABASE_URL for Store integration test")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	profiles, err := NewPostgres(ctx, databaseURL)
+	profiles, err := New(ctx, databaseURL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestFindOrCreateKeepsProfilesSeparate(t *testing.T) {
 	if first.ID != firstID || second.ID != secondID || !reflect.DeepEqual(again, first) {
 		t.Fatalf("profiles were mixed or unstable: first=%+v second=%+v again=%+v", first, second, again)
 	}
-	saved, err := profiles.Update(ctx, firstID, api.ProfileInput{DisplayName: "Kabeer", City: "Mumbai", Bio: "City explorer", Headline: "Mobile engineer", Interests: []string{"Go", "Design"}})
+	saved, err := profiles.Update(ctx, firstID, domain.ProfileInput{DisplayName: "Kabeer", City: "Mumbai", Bio: "City explorer", Headline: "Mobile engineer", Interests: []string{"Go", "Design"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,11 +70,11 @@ func TestFindOrCreateKeepsProfilesSeparate(t *testing.T) {
 func TestSearchPeopleMatchesPublicProfilesAndPages(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
 	if databaseURL == "" {
-		t.Skip("set TEST_DATABASE_URL for Postgres integration test")
+		t.Skip("set TEST_DATABASE_URL for Store integration test")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	profiles, err := NewPostgres(ctx, databaseURL)
+	profiles, err := New(ctx, databaseURL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +97,7 @@ func TestSearchPeopleMatchesPublicProfilesAndPages(t *testing.T) {
 		if index == 22 {
 			city, headline = "Pune", prefix+"Illustrator"
 		}
-		if _, err := profiles.Update(ctx, id, api.ProfileInput{DisplayName: fmt.Sprintf("Person %02d %s", index, prefix), City: city, Headline: headline, Interests: []string{}}); err != nil {
+		if _, err := profiles.Update(ctx, id, domain.ProfileInput{DisplayName: fmt.Sprintf("Person %02d %s", index, prefix), City: city, Headline: headline, Interests: []string{}}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -132,7 +132,7 @@ func TestSearchPeopleMatchesPublicProfilesAndPages(t *testing.T) {
 	if err != nil || public.ID != ids[22] || public.City != "Pune" {
 		t.Fatalf("public profile wrong: %+v %v", public, err)
 	}
-	if _, err := profiles.PublicProfile(ctx, prefix+"missing"); err != api.ErrProfileNotFound {
+	if _, err := profiles.PublicProfile(ctx, prefix+"missing"); err != domain.ErrProfileNotFound {
 		t.Fatalf("missing public profile error = %v", err)
 	}
 }

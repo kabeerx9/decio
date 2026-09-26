@@ -1,16 +1,16 @@
-package store
+package postgres
 
 import (
 	"context"
 	"errors"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/kabeerx9/decio-update/services/api/internal/api"
+	"github.com/kabeerx9/decio-update/services/api/internal/domain"
 )
 
 const peoplePageSize = 20
 
-func (s *Postgres) SearchPeople(ctx context.Context, viewerID, query, cursor string) (api.PeoplePage, error) {
+func (s *Store) SearchPeople(ctx context.Context, viewerID, query, cursor string) (domain.PeoplePage, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, display_name, city, bio, headline, interests
 		FROM profiles
@@ -22,19 +22,19 @@ func (s *Postgres) SearchPeople(ctx context.Context, viewerID, query, cursor str
 		LIMIT $4
 	`, viewerID, query, cursor, peoplePageSize+1)
 	if err != nil {
-		return api.PeoplePage{}, err
+		return domain.PeoplePage{}, err
 	}
 	defer rows.Close()
-	page := api.PeoplePage{People: []api.Profile{}}
+	page := domain.PeoplePage{People: []domain.Profile{}}
 	for rows.Next() {
-		var person api.Profile
+		var person domain.Profile
 		if err := rows.Scan(&person.ID, &person.DisplayName, &person.City, &person.Bio, &person.Headline, &person.Interests); err != nil {
-			return api.PeoplePage{}, err
+			return domain.PeoplePage{}, err
 		}
 		page.People = append(page.People, person)
 	}
 	if err := rows.Err(); err != nil {
-		return api.PeoplePage{}, err
+		return domain.PeoplePage{}, err
 	}
 	if len(page.People) > peoplePageSize {
 		page.People = page.People[:peoplePageSize]
@@ -43,14 +43,14 @@ func (s *Postgres) SearchPeople(ctx context.Context, viewerID, query, cursor str
 	return page, nil
 }
 
-func (s *Postgres) PublicProfile(ctx context.Context, id string) (api.Profile, error) {
-	var person api.Profile
+func (s *Store) PublicProfile(ctx context.Context, id string) (domain.Profile, error) {
+	var person domain.Profile
 	err := s.pool.QueryRow(ctx, `
 		SELECT id, display_name, city, bio, headline, interests
 		FROM profiles WHERE id = $1 AND display_name <> ''
 	`, id).Scan(&person.ID, &person.DisplayName, &person.City, &person.Bio, &person.Headline, &person.Interests)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return api.Profile{}, api.ErrProfileNotFound
+		return domain.Profile{}, domain.ErrProfileNotFound
 	}
 	return person, err
 }

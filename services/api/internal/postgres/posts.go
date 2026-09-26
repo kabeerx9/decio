@@ -1,4 +1,4 @@
-package store
+package postgres
 
 import (
 	"context"
@@ -6,11 +6,11 @@ import (
 	"strconv"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/kabeerx9/decio-update/services/api/internal/api"
+	"github.com/kabeerx9/decio-update/services/api/internal/domain"
 )
 
-func (s *Postgres) CreatePost(ctx context.Context, authorID, body string, photo []byte, photoType string) (api.Post, error) {
-	var post api.Post
+func (s *Store) CreatePost(ctx context.Context, authorID, body string, photo []byte, photoType string) (domain.Post, error) {
+	var post domain.Post
 	err := s.pool.QueryRow(ctx, `
 		WITH inserted AS (
 			INSERT INTO city_posts (author_id, city, body, photo, photo_type)
@@ -22,13 +22,13 @@ func (s *Postgres) CreatePost(ctx context.Context, authorID, body string, photo 
 		FROM inserted i JOIN profiles p ON p.id = i.author_id
 	`, authorID, body, photo, photoType).Scan(&post.ID, &post.AuthorID, &post.AuthorName, &post.City, &post.Body, &post.HasPhoto, &post.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return api.Post{}, api.ErrProfileIncomplete
+		return domain.Post{}, domain.ErrProfileIncomplete
 	}
 	return post, err
 }
 
-func (s *Postgres) ListPosts(ctx context.Context, viewerID, cursor string) (api.PostPage, error) {
-	page := api.PostPage{Posts: []api.Post{}}
+func (s *Store) ListPosts(ctx context.Context, viewerID, cursor string) (domain.PostPage, error) {
+	page := domain.PostPage{Posts: []domain.Post{}}
 	if err := s.pool.QueryRow(ctx, `SELECT city FROM profiles WHERE id = $1`, viewerID).Scan(&page.City); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return page, nil
@@ -53,7 +53,7 @@ func (s *Postgres) ListPosts(ctx context.Context, viewerID, cursor string) (api.
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var post api.Post
+		var post domain.Post
 		if err := rows.Scan(&post.ID, &post.AuthorID, &post.AuthorName, &post.City, &post.Body, &post.HasPhoto, &post.CreatedAt); err != nil {
 			return page, err
 		}
@@ -69,7 +69,7 @@ func (s *Postgres) ListPosts(ctx context.Context, viewerID, cursor string) (api.
 	return page, nil
 }
 
-func (s *Postgres) PostPhoto(ctx context.Context, viewerID, postID string) ([]byte, string, error) {
+func (s *Store) PostPhoto(ctx context.Context, viewerID, postID string) ([]byte, string, error) {
 	var photo []byte
 	var kind string
 	err := s.pool.QueryRow(ctx, `
@@ -78,7 +78,7 @@ func (s *Postgres) PostPhoto(ctx context.Context, viewerID, postID string) ([]by
 		WHERE cp.id = $2 AND cp.photo IS NOT NULL
 	`, viewerID, postID).Scan(&photo, &kind)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, "", api.ErrPostNotFound
+		return nil, "", domain.ErrPostNotFound
 	}
 	return photo, kind, err
 }

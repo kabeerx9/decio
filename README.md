@@ -5,7 +5,7 @@ A people-first city network rebuilt with Expo, Go, Clerk, Postgres, and later Ab
 ## Project map
 
 - [`apps/mobile`](apps/mobile): Expo Router app, Clerk session, TanStack Query, Street Atlas UI.
-- [`services/api`](services/api): Go HTTP API, Clerk token verification, Postgres profile storage.
+- [`services/api`](services/api): Go HTTP API, Clerk token verification, and Postgres persistence. See its [package and request-flow map](services/api/README.md).
 - [`compose.yaml`](compose.yaml): optional local Postgres for development and integration tests.
 - [GitHub milestone map](https://github.com/kabeerx9/decio-update/issues/1): decisions, tickets, and blockers.
 

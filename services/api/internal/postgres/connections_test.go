@@ -1,4 +1,4 @@
-package store
+package postgres
 
 import (
 	"context"
@@ -9,17 +9,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kabeerx9/decio-update/services/api/internal/api"
+	"github.com/kabeerx9/decio-update/services/api/internal/domain"
 )
 
 func TestConnectionAuthorizationAndStateTransitions(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
 	if databaseURL == "" {
-		t.Skip("set TEST_DATABASE_URL for Postgres integration test")
+		t.Skip("set TEST_DATABASE_URL for Store integration test")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	store, err := NewPostgres(ctx, databaseURL)
+	store, err := New(ctx, databaseURL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,23 +43,23 @@ func TestConnectionAuthorizationAndStateTransitions(t *testing.T) {
 		}
 	})
 	for _, id := range ids[:3] {
-		if _, err := store.Update(ctx, id, api.ProfileInput{DisplayName: id, City: "Mumbai", Interests: []string{}}); err != nil {
+		if _, err := store.Update(ctx, id, domain.ProfileInput{DisplayName: id, City: "Mumbai", Interests: []string{}}); err != nil {
 			t.Fatal(err)
 		}
 	}
 	if _, err := store.FindOrCreate(ctx, ids[3]); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.RequestConnection(ctx, ids[3], ids[0]); !errors.Is(err, api.ErrProfileIncomplete) {
+	if err := store.RequestConnection(ctx, ids[3], ids[0]); !errors.Is(err, domain.ErrProfileIncomplete) {
 		t.Fatalf("incomplete requester: %v", err)
 	}
 	if err := store.RequestConnection(ctx, ids[0], ids[1]); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.RequestConnection(ctx, ids[0], ids[1]); !errors.Is(err, api.ErrConnectionExists) {
+	if err := store.RequestConnection(ctx, ids[0], ids[1]); !errors.Is(err, domain.ErrConnectionExists) {
 		t.Fatalf("duplicate request: %v", err)
 	}
-	if err := store.RequestConnection(ctx, ids[1], ids[0]); !errors.Is(err, api.ErrConnectionExists) {
+	if err := store.RequestConnection(ctx, ids[1], ids[0]); !errors.Is(err, domain.ErrConnectionExists) {
 		t.Fatalf("reverse request: %v", err)
 	}
 	for _, test := range []struct {
@@ -72,14 +72,14 @@ func TestConnectionAuthorizationAndStateTransitions(t *testing.T) {
 		}
 	}
 	for _, user := range []string{ids[0], ids[2]} {
-		if err := store.AcceptConnection(ctx, user, ids[0]); !errors.Is(err, api.ErrConnectionNotFound) {
+		if err := store.AcceptConnection(ctx, user, ids[0]); !errors.Is(err, domain.ErrConnectionNotFound) {
 			t.Fatalf("non-recipient accepted: %v", err)
 		}
 	}
 	if err := store.AcceptConnection(ctx, ids[1], ids[0]); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.AcceptConnection(ctx, ids[1], ids[0]); !errors.Is(err, api.ErrConnectionNotFound) {
+	if err := store.AcceptConnection(ctx, ids[1], ids[0]); !errors.Is(err, domain.ErrConnectionNotFound) {
 		t.Fatalf("repeat accept: %v", err)
 	}
 	for _, user := range ids[:2] {
@@ -88,7 +88,7 @@ func TestConnectionAuthorizationAndStateTransitions(t *testing.T) {
 			t.Fatalf("%s sees %v, err=%v", user, list, err)
 		}
 	}
-	if err := store.RequestConnection(ctx, ids[0], "missing_person"); !errors.Is(err, api.ErrProfileNotFound) {
+	if err := store.RequestConnection(ctx, ids[0], "missing_person"); !errors.Is(err, domain.ErrProfileNotFound) {
 		t.Fatalf("missing recipient: %v", err)
 	}
 
@@ -105,7 +105,7 @@ func TestConnectionAuthorizationAndStateTransitions(t *testing.T) {
 		switch {
 		case err == nil:
 			created++
-		case errors.Is(err, api.ErrConnectionExists):
+		case errors.Is(err, domain.ErrConnectionExists):
 			conflicted++
 		default:
 			t.Fatal(err)

@@ -1,6 +1,7 @@
-package api
+package httpapi
 
 import (
+	"github.com/kabeerx9/decio-update/services/api/internal/domain"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -48,15 +49,15 @@ func TestConnectionRoutesUseVerifiedIdentityAndMapStateErrors(t *testing.T) {
 	if response := request(http.MethodPost, "/v1/connections", `{"userId":"other"}`); response.Code != http.StatusCreated || profiles.connectionRequester != "user_from_verified_token" || profiles.connectionRecipient != "other" {
 		t.Fatalf("request status=%d from=%q to=%q", response.Code, profiles.connectionRequester, profiles.connectionRecipient)
 	}
-	profiles.err = ErrConnectionExists
+	profiles.err = domain.ErrConnectionExists
 	if response := request(http.MethodPost, "/v1/connections", `{"userId":"other"}`); response.Code != http.StatusConflict {
 		t.Fatalf("duplicate status=%d", response.Code)
 	}
-	profiles.err = ErrProfileIncomplete
+	profiles.err = domain.ErrProfileIncomplete
 	if response := request(http.MethodPost, "/v1/connections", `{"userId":"other"}`); response.Code != http.StatusBadRequest {
 		t.Fatalf("incomplete profile status=%d", response.Code)
 	}
-	profiles.err = ErrConnectionNotFound
+	profiles.err = domain.ErrConnectionNotFound
 	if response := request(http.MethodPost, "/v1/connections/other/accept", ""); response.Code != http.StatusNotFound || profiles.connectionRecipient != "user_from_verified_token" {
 		t.Fatalf("non-recipient accept status=%d recipient=%q", response.Code, profiles.connectionRecipient)
 	}
@@ -64,7 +65,7 @@ func TestConnectionRoutesUseVerifiedIdentityAndMapStateErrors(t *testing.T) {
 	if response := request(http.MethodPost, "/v1/connections/other/accept", ""); response.Code != http.StatusNoContent {
 		t.Fatalf("accept status=%d", response.Code)
 	}
-	profiles.connectionResult = []Connection{{Other: Profile{ID: "other", DisplayName: "Other", Interests: []string{}}, Status: "accepted"}}
+	profiles.connectionResult = []domain.Connection{{Other: domain.Profile{ID: "other", DisplayName: "Other", Interests: []string{}}, Status: "accepted"}}
 	response := request(http.MethodGet, "/v1/connections", "")
 	if response.Code != http.StatusOK || profiles.requestedID != "user_from_verified_token" || !strings.Contains(response.Body.String(), `"status":"accepted"`) || response.Header().Get("Cache-Control") != "no-store" {
 		t.Fatalf("list status=%d body=%s", response.Code, response.Body.String())

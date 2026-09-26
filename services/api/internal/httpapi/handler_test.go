@@ -1,8 +1,9 @@
-package api
+package httpapi
 
 import (
 	"context"
 	"errors"
+	"github.com/kabeerx9/decio-update/services/api/internal/domain"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,30 +12,30 @@ import (
 
 type fakeProfiles struct {
 	requestedID         string
-	profile             Profile
+	profile             domain.Profile
 	err                 error
-	updated             ProfileInput
+	updated             domain.ProfileInput
 	searchQuery         string
 	searchCursor        string
-	searchResult        PeoplePage
+	searchResult        domain.PeoplePage
 	publicID            string
 	connectionRequester string
 	connectionRecipient string
-	connectionResult    []Connection
-	postResult          Post
-	postPage            PostPage
+	connectionResult    []domain.Connection
+	postResult          domain.Post
+	postPage            domain.PostPage
 	postBody            string
 	postPhoto           []byte
 	postKind            string
 	postCursor          string
 }
 
-func (f *fakeProfiles) CreatePost(_ context.Context, id, body string, photo []byte, kind string) (Post, error) {
+func (f *fakeProfiles) CreatePost(_ context.Context, id, body string, photo []byte, kind string) (domain.Post, error) {
 	f.requestedID, f.postBody, f.postPhoto, f.postKind = id, body, photo, kind
 	return f.postResult, f.err
 }
 
-func (f *fakeProfiles) ListPosts(_ context.Context, id, cursor string) (PostPage, error) {
+func (f *fakeProfiles) ListPosts(_ context.Context, id, cursor string) (domain.PostPage, error) {
 	f.requestedID, f.postCursor = id, cursor
 	return f.postPage, f.err
 }
@@ -44,23 +45,23 @@ func (f *fakeProfiles) PostPhoto(_ context.Context, id, postID string) ([]byte, 
 	return f.postPhoto, f.postKind, f.err
 }
 
-func (f *fakeProfiles) FindOrCreate(_ context.Context, id string) (Profile, error) {
+func (f *fakeProfiles) FindOrCreate(_ context.Context, id string) (domain.Profile, error) {
 	f.requestedID = id
 	return f.profile, f.err
 }
 
-func (f *fakeProfiles) Update(_ context.Context, id string, input ProfileInput) (Profile, error) {
+func (f *fakeProfiles) Update(_ context.Context, id string, input domain.ProfileInput) (domain.Profile, error) {
 	f.requestedID = id
 	f.updated = input
-	return Profile{ID: id, DisplayName: input.DisplayName, City: input.City, Bio: input.Bio, Headline: input.Headline, Interests: input.Interests}, f.err
+	return domain.Profile{ID: id, DisplayName: input.DisplayName, City: input.City, Bio: input.Bio, Headline: input.Headline, Interests: input.Interests}, f.err
 }
 
-func (f *fakeProfiles) SearchPeople(_ context.Context, viewerID, query, cursor string) (PeoplePage, error) {
+func (f *fakeProfiles) SearchPeople(_ context.Context, viewerID, query, cursor string) (domain.PeoplePage, error) {
 	f.requestedID, f.searchQuery, f.searchCursor = viewerID, query, cursor
 	return f.searchResult, f.err
 }
 
-func (f *fakeProfiles) PublicProfile(_ context.Context, id string) (Profile, error) {
+func (f *fakeProfiles) PublicProfile(_ context.Context, id string) (domain.Profile, error) {
 	f.publicID = id
 	return f.profile, f.err
 }
@@ -75,7 +76,7 @@ func (f *fakeProfiles) AcceptConnection(_ context.Context, recipientID, requeste
 	return f.err
 }
 
-func (f *fakeProfiles) ListConnections(_ context.Context, id string) ([]Connection, error) {
+func (f *fakeProfiles) ListConnections(_ context.Context, id string) ([]domain.Connection, error) {
 	f.requestedID = id
 	return f.connectionResult, f.err
 }
@@ -91,7 +92,7 @@ func testAuth(next http.Handler) http.Handler {
 }
 
 func TestMeUsesVerifiedIdentity(t *testing.T) {
-	profiles := &fakeProfiles{profile: Profile{ID: "user_from_verified_token"}}
+	profiles := &fakeProfiles{profile: domain.Profile{ID: "user_from_verified_token"}}
 	server := NewHandler(profiles, testAuth)
 	request := httptest.NewRequest(http.MethodGet, "/v1/me", nil)
 	request.Header.Set("Authorization", "Bearer good-session")
@@ -209,7 +210,7 @@ func TestPutMeDoesNotLeakStorageErrors(t *testing.T) {
 }
 
 func TestPeopleSearchUsesVerifiedViewerAndReturnsPage(t *testing.T) {
-	profiles := &fakeProfiles{searchResult: PeoplePage{People: []Profile{{ID: "other", DisplayName: "Asha", City: "Mumbai", Interests: []string{}}}, NextCursor: "other"}}
+	profiles := &fakeProfiles{searchResult: domain.PeoplePage{People: []domain.Profile{{ID: "other", DisplayName: "Asha", City: "Mumbai", Interests: []string{}}}, NextCursor: "other"}}
 	request := httptest.NewRequest(http.MethodGet, "/v1/people?q=+mUmbai+&cursor=before", nil)
 	request.Header.Set("Authorization", "Bearer good-session")
 	response := httptest.NewRecorder()
@@ -242,7 +243,7 @@ func TestPeopleSearchRequiresSessionAndBoundsQuery(t *testing.T) {
 }
 
 func TestPublicProfileShowsOnlyPublicFields(t *testing.T) {
-	profiles := &fakeProfiles{profile: Profile{ID: "other", DisplayName: "Asha", City: "Mumbai", Bio: "Hello", Interests: []string{"Go"}}}
+	profiles := &fakeProfiles{profile: domain.Profile{ID: "other", DisplayName: "Asha", City: "Mumbai", Bio: "Hello", Interests: []string{"Go"}}}
 	request := httptest.NewRequest(http.MethodGet, "/v1/people/other", nil)
 	request.Header.Set("Authorization", "Bearer good-session")
 	response := httptest.NewRecorder()
@@ -253,7 +254,7 @@ func TestPublicProfileShowsOnlyPublicFields(t *testing.T) {
 }
 
 func TestPublicProfileMissingReturns404(t *testing.T) {
-	profiles := &fakeProfiles{err: ErrProfileNotFound}
+	profiles := &fakeProfiles{err: domain.ErrProfileNotFound}
 	request := httptest.NewRequest(http.MethodGet, "/v1/people/missing", nil)
 	request.Header.Set("Authorization", "Bearer good-session")
 	response := httptest.NewRecorder()

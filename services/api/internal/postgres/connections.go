@@ -1,16 +1,16 @@
-package store
+package postgres
 
 import (
 	"context"
 	"errors"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/kabeerx9/decio-update/services/api/internal/api"
+	"github.com/kabeerx9/decio-update/services/api/internal/domain"
 )
 
 // RequestConnection inserts one pending relationship for an unordered user pair.
 // The primary key makes simultaneous or reverse-direction requests conflict.
-func (s *Postgres) RequestConnection(ctx context.Context, requesterID, recipientID string) error {
+func (s *Store) RequestConnection(ctx context.Context, requesterID, recipientID string) error {
 	var requesterReady, recipientReady bool
 	if err := s.pool.QueryRow(ctx, `SELECT EXISTS (
 		SELECT 1 FROM profiles WHERE id = $1 AND display_name <> ''
@@ -22,10 +22,10 @@ func (s *Postgres) RequestConnection(ctx context.Context, requesterID, recipient
 		return err
 	}
 	if !requesterReady {
-		return api.ErrProfileIncomplete
+		return domain.ErrProfileIncomplete
 	}
 	if !recipientReady {
-		return api.ErrProfileNotFound
+		return domain.ErrProfileNotFound
 	}
 	result, err := s.pool.Exec(ctx, `
 		INSERT INTO connections (user_low, user_high, requester_id, recipient_id)
@@ -36,13 +36,13 @@ func (s *Postgres) RequestConnection(ctx context.Context, requesterID, recipient
 		return err
 	}
 	if result.RowsAffected() == 0 {
-		return api.ErrConnectionExists
+		return domain.ErrConnectionExists
 	}
 	return nil
 }
 
 // AcceptConnection changes only a pending request addressed to the caller.
-func (s *Postgres) AcceptConnection(ctx context.Context, recipientID, requesterID string) error {
+func (s *Store) AcceptConnection(ctx context.Context, recipientID, requesterID string) error {
 	var accepted string
 	err := s.pool.QueryRow(ctx, `
 		UPDATE connections SET status = 'accepted', accepted_at = NOW()
@@ -50,13 +50,13 @@ func (s *Postgres) AcceptConnection(ctx context.Context, recipientID, requesterI
 		RETURNING status
 	`, recipientID, requesterID).Scan(&accepted)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return api.ErrConnectionNotFound
+		return domain.ErrConnectionNotFound
 	}
 	return err
 }
 
 // ListConnections projects each relationship from the current user's side.
-func (s *Postgres) ListConnections(ctx context.Context, userID string) ([]api.Connection, error) {
+func (s *Store) ListConnections(ctx context.Context, userID string) ([]domain.Connection, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT p.id, p.display_name, p.city, p.bio, p.headline, p.interests,
 			CASE WHEN c.status = 'accepted' THEN 'accepted'
@@ -70,9 +70,9 @@ func (s *Postgres) ListConnections(ctx context.Context, userID string) ([]api.Co
 		return nil, err
 	}
 	defer rows.Close()
-	connections := []api.Connection{}
+	connections := []domain.Connection{}
 	for rows.Next() {
-		var connection api.Connection
+		var connection domain.Connection
 		if err := rows.Scan(&connection.Other.ID, &connection.Other.DisplayName, &connection.Other.City, &connection.Other.Bio, &connection.Other.Headline, &connection.Other.Interests, &connection.Status); err != nil {
 			return nil, err
 		}

@@ -1,7 +1,8 @@
-package api
+package httpapi
 
 import (
 	"bytes"
+	"github.com/kabeerx9/decio-update/services/api/internal/domain"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -60,7 +61,7 @@ func TestCreatePostUsesVerifiedAuthorAndNormalizesPhoto(t *testing.T) {
 	if err := jpeg.Encode(&raw, photo, nil); err != nil {
 		t.Fatal(err)
 	}
-	store := &fakeProfiles{postResult: Post{ID: "1"}}
+	store := &fakeProfiles{postResult: domain.Post{ID: "1"}}
 	response := httptest.NewRecorder()
 	NewHandler(store, testAuth).ServeHTTP(response, postRequest(t, "  City hello  ", raw.Bytes()))
 	if response.Code != http.StatusCreated || store.requestedID != "user_from_verified_token" || store.postBody != "City hello" || store.postKind != "image/jpeg" || len(store.postPhoto) == 0 {
@@ -83,7 +84,7 @@ func TestCreatePostRejectsInvalidInputAndIncompleteProfile(t *testing.T) {
 	if response.Code != http.StatusBadRequest || store.requestedID != "" {
 		t.Fatalf("invalid photo status=%d storage=%q", response.Code, store.requestedID)
 	}
-	store = &fakeProfiles{err: ErrProfileIncomplete}
+	store = &fakeProfiles{err: domain.ErrProfileIncomplete}
 	response = httptest.NewRecorder()
 	NewHandler(store, testAuth).ServeHTTP(response, postRequest(t, "hello", nil))
 	if response.Code != http.StatusBadRequest {
@@ -92,7 +93,7 @@ func TestCreatePostRejectsInvalidInputAndIncompleteProfile(t *testing.T) {
 }
 
 func TestPostReadUsesVerifiedViewerAndValidatesCursor(t *testing.T) {
-	store := &fakeProfiles{postPage: PostPage{City: "Mumbai", Posts: []Post{}, NextCursor: ""}}
+	store := &fakeProfiles{postPage: domain.PostPage{City: "Mumbai", Posts: []domain.Post{}, NextCursor: ""}}
 	request := httptest.NewRequest(http.MethodGet, "/v1/posts?cursor=21", nil)
 	request.Header.Set("Authorization", "Bearer good-session")
 	response := httptest.NewRecorder()
@@ -119,7 +120,7 @@ func TestPhotoReadUsesVerifiedViewer(t *testing.T) {
 	if response.Code != http.StatusOK || store.requestedID != "user_from_verified_token" || store.publicID != "23" || response.Header().Get("Cache-Control") != "no-store" || response.Body.String() != "image" {
 		t.Fatalf("status=%d viewer=%q post=%q", response.Code, store.requestedID, store.publicID)
 	}
-	store.err = ErrPostNotFound
+	store.err = domain.ErrPostNotFound
 	response = httptest.NewRecorder()
 	NewHandler(store, testAuth).ServeHTTP(response, request)
 	if response.Code != http.StatusNotFound {

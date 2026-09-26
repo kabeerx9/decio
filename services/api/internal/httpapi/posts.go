@@ -1,4 +1,4 @@
-package api
+package httpapi
 
 import (
 	"bytes"
@@ -13,31 +13,14 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 	"unicode/utf8"
+
+	"github.com/kabeerx9/decio-update/services/api/internal/domain"
 )
 
-var ErrPostNotFound = errors.New("post not found")
-
-type Post struct {
-	ID         string    `json:"id"`
-	AuthorID   string    `json:"authorId"`
-	AuthorName string    `json:"authorName"`
-	City       string    `json:"city"`
-	Body       string    `json:"body"`
-	HasPhoto   bool      `json:"hasPhoto"`
-	CreatedAt  time.Time `json:"createdAt"`
-}
-
-type PostPage struct {
-	City       string `json:"city"`
-	Posts      []Post `json:"posts"`
-	NextCursor string `json:"nextCursor"`
-}
-
 type PostStore interface {
-	CreatePost(ctx context.Context, authorID, body string, photo []byte, photoType string) (Post, error)
-	ListPosts(ctx context.Context, viewerID, cursor string) (PostPage, error)
+	CreatePost(ctx context.Context, authorID, body string, photo []byte, photoType string) (domain.Post, error)
+	ListPosts(ctx context.Context, viewerID, cursor string) (domain.PostPage, error)
 	PostPhoto(ctx context.Context, viewerID, postID string) ([]byte, string, error)
 }
 
@@ -86,7 +69,7 @@ func registerPostRoutes(mux *http.ServeMux, store PostStore, authenticate Middle
 		}
 		post, err := store.CreatePost(r.Context(), id, body, photo, photoType)
 		switch {
-		case errors.Is(err, ErrProfileIncomplete):
+		case errors.Is(err, domain.ErrProfileIncomplete):
 			http.Error(w, "add your city to your profile first", http.StatusBadRequest)
 		case err != nil:
 			log.Printf("create post: %v", err)
@@ -135,7 +118,7 @@ func registerPostRoutes(mux *http.ServeMux, store PostStore, authenticate Middle
 			return
 		}
 		photo, kind, err := store.PostPhoto(r.Context(), id, postID)
-		if errors.Is(err, ErrPostNotFound) {
+		if errors.Is(err, domain.ErrPostNotFound) {
 			http.Error(w, "photo not found", http.StatusNotFound)
 			return
 		}

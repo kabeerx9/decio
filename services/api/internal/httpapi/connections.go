@@ -1,4 +1,4 @@
-package api
+package httpapi
 
 import (
 	"context"
@@ -8,21 +8,14 @@ import (
 	"log"
 	"net/http"
 	"strings"
+
+	"github.com/kabeerx9/decio-update/services/api/internal/domain"
 )
-
-var ErrConnectionExists = errors.New("connection already exists")
-var ErrConnectionNotFound = errors.New("pending connection not found")
-var ErrProfileIncomplete = errors.New("complete your profile first")
-
-type Connection struct {
-	Other  Profile `json:"other"`
-	Status string  `json:"status"`
-}
 
 type ConnectionStore interface {
 	RequestConnection(ctx context.Context, requesterID, recipientID string) error
 	AcceptConnection(ctx context.Context, recipientID, requesterID string) error
-	ListConnections(ctx context.Context, userID string) ([]Connection, error)
+	ListConnections(ctx context.Context, userID string) ([]domain.Connection, error)
 }
 
 func registerConnectionRoutes(mux *http.ServeMux, store ConnectionStore, authenticate Middleware) {
@@ -41,7 +34,7 @@ func registerConnectionRoutes(mux *http.ServeMux, store ConnectionStore, authent
 		}
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(struct {
-			Connections []Connection `json:"connections"`
+			Connections []domain.Connection `json:"connections"`
 		}{connections}); err != nil {
 			log.Printf("encode connections: %v", err)
 		}
@@ -73,11 +66,11 @@ func registerConnectionRoutes(mux *http.ServeMux, store ConnectionStore, authent
 		}
 		err := store.RequestConnection(r.Context(), id, input.UserID)
 		switch {
-		case errors.Is(err, ErrProfileIncomplete):
+		case errors.Is(err, domain.ErrProfileIncomplete):
 			http.Error(w, "complete your profile first", http.StatusBadRequest)
-		case errors.Is(err, ErrProfileNotFound):
+		case errors.Is(err, domain.ErrProfileNotFound):
 			http.Error(w, "profile not found", http.StatusNotFound)
-		case errors.Is(err, ErrConnectionExists):
+		case errors.Is(err, domain.ErrConnectionExists):
 			http.Error(w, "connection already exists", http.StatusConflict)
 		case err != nil:
 			log.Printf("request connection: %v", err)
@@ -100,7 +93,7 @@ func registerConnectionRoutes(mux *http.ServeMux, store ConnectionStore, authent
 		}
 		err := store.AcceptConnection(r.Context(), id, requesterID)
 		switch {
-		case errors.Is(err, ErrConnectionNotFound):
+		case errors.Is(err, domain.ErrConnectionNotFound):
 			http.Error(w, "pending request not found", http.StatusNotFound)
 		case err != nil:
 			log.Printf("accept connection: %v", err)
