@@ -44,7 +44,24 @@ func (s *Postgres) FindOrCreate(ctx context.Context, clerkUserID string) (api.Pr
 		return api.Profile{}, err
 	}
 	var profile api.Profile
-	err = s.pool.QueryRow(ctx, `SELECT id, display_name, city FROM profiles WHERE id = $1`, clerkUserID).
-		Scan(&profile.ID, &profile.DisplayName, &profile.City)
+	err = s.pool.QueryRow(ctx, `SELECT id, display_name, city, bio, headline, interests FROM profiles WHERE id = $1`, clerkUserID).
+		Scan(&profile.ID, &profile.DisplayName, &profile.City, &profile.Bio, &profile.Headline, &profile.Interests)
+	return profile, err
+}
+
+func (s *Postgres) Update(ctx context.Context, clerkUserID string, input api.ProfileInput) (api.Profile, error) {
+	var profile api.Profile
+	err := s.pool.QueryRow(ctx, `
+		INSERT INTO profiles (id, display_name, city, bio, headline, interests)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (id) DO UPDATE SET
+			display_name = EXCLUDED.display_name,
+			city = EXCLUDED.city,
+			bio = EXCLUDED.bio,
+			headline = EXCLUDED.headline,
+			interests = EXCLUDED.interests
+		RETURNING id, display_name, city, bio, headline, interests
+	`, clerkUserID, input.DisplayName, input.City, input.Bio, input.Headline, input.Interests).
+		Scan(&profile.ID, &profile.DisplayName, &profile.City, &profile.Bio, &profile.Headline, &profile.Interests)
 	return profile, err
 }

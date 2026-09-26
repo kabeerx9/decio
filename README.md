@@ -37,7 +37,7 @@ A people-first city network rebuilt with Expo, Go, Clerk, Postgres, and later Ab
    npm start
    ```
 
-The API creates the first `profiles` table on startup. `GET /health` is public. `GET /v1/me` requires `Authorization: Bearer <Clerk session token>` and returns `{ "id", "displayName", "city" }`. The ID comes from verified Clerk claims, never from a client-supplied profile ID.
+The API creates or extends the `profiles` table on startup. `GET /health` is public. `GET /v1/me` requires `Authorization: Bearer <Clerk session token>` and returns `{ "id", "displayName", "city", "bio", "headline", "interests" }`. `PUT /v1/me` replaces those five editable fields; it requires a display name and city. The ID comes from verified Clerk claims, never from a client-supplied profile ID. The current schema update adds `bio`, `headline`, and `interests` columns to the Supabase project; these columns remain after a code revert.
 
 `CORS_ALLOWED_ORIGINS` is a comma-separated list of exact browser origins. The example permits Expo web at `http://localhost:8081`; native iOS and Android requests do not use CORS.
 
@@ -52,4 +52,4 @@ With local Postgres running, set `TEST_DATABASE_URL=postgres://decio:decio@local
 
 ## Design direction
 
-Street Atlas uses ink navy, electric blue, paper white, and a small signal-yellow accent. Bricolage Grotesque is for short display text; DM Sans carries interface text. Discover is photo-led and people-first. For contained choices, use the Expo UI bottom sheet already included in SDK 57; the native sheet fits city selection and action menus. TanStack Query owns remote data cache. React Native Keyboard Controller keeps the auth form above the keyboard and can also support profile and search forms. Keep full profiles as screens and avoid maps or distance ranking in this milestone.
+Street Atlas uses ink navy, electric blue, paper white, and a small signal-yellow accent. Bricolage Grotesque is for short display text; DM Sans carries interface text. Discover is photo-led and people-first. City selection uses Expo UI's native-backed modal sheet with a search field and a custom city option; no location permission is requested. TanStack Query owns remote data cache. React Native Keyboard Controller keeps auth and profile forms above the keyboard. People search will match name, city, and headline, while profiles remain visible only to signed-in users. Keep full profiles as screens and avoid maps or distance ranking in this milestone.

@@ -4,8 +4,11 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"reflect"
 	"testing"
 	"time"
+
+	"github.com/kabeerx9/decio-update/services/api/internal/api"
 )
 
 func TestFindOrCreateKeepsProfilesSeparate(t *testing.T) {
@@ -44,7 +47,22 @@ func TestFindOrCreateKeepsProfilesSeparate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first.ID != firstID || second.ID != secondID || again != first {
+	if first.ID != firstID || second.ID != secondID || !reflect.DeepEqual(again, first) {
 		t.Fatalf("profiles were mixed or unstable: first=%+v second=%+v again=%+v", first, second, again)
+	}
+	saved, err := profiles.Update(ctx, firstID, api.ProfileInput{DisplayName: "Kabeer", City: "Mumbai", Bio: "City explorer", Headline: "Mobile engineer", Interests: []string{"Go", "Design"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := profiles.FindOrCreate(ctx, firstID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := profiles.FindOrCreate(ctx, secondID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(saved, reloaded) || other.DisplayName != "" || other.City != "" {
+		t.Fatalf("profile edit did not persist separately: saved=%+v reloaded=%+v other=%+v", saved, reloaded, other)
 	}
 }
