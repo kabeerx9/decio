@@ -66,3 +66,73 @@ func TestFindOrCreateKeepsProfilesSeparate(t *testing.T) {
 		t.Fatalf("profile edit did not persist separately: saved=%+v reloaded=%+v other=%+v", saved, reloaded, other)
 	}
 }
+
+func TestSearchPeopleMatchesPublicProfilesAndPages(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("set TEST_DATABASE_URL for Postgres integration test")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	profiles, err := NewPostgres(ctx, databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(profiles.Close)
+	prefix := fmt.Sprintf("test_search_%d_", time.Now().UnixNano())
+	ids := make([]string, 0, 24)
+	t.Cleanup(func() {
+		cleanupCtx, stop := context.WithTimeout(context.Background(), 5*time.Second)
+		defer stop()
+		for _, id := range ids {
+			if _, err := profiles.pool.Exec(cleanupCtx, "DELETE FROM profiles WHERE id = $1", id); err != nil {
+				t.Errorf("clean up profile %s: %v", id, err)
+			}
+		}
+	})
+	for index := 0; index < 23; index++ {
+		id := fmt.Sprintf("%s%02d", prefix, index)
+		ids = append(ids, id)
+		city, headline := prefix+"Mumbai", "Engineer"
+		if index == 22 {
+			city, headline = "Pune", prefix+"Illustrator"
+		}
+		if _, err := profiles.Update(ctx, id, api.ProfileInput{DisplayName: fmt.Sprintf("Person %02d %s", index, prefix), City: city, Headline: headline, Interests: []string{}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	viewerID := ids[0]
+	page, err := profiles.SearchPeople(ctx, viewerID, prefix+"mUmBaI", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.People) != 20 || page.People[0].ID != ids[1] || page.NextCursor != ids[20] {
+		t.Fatalf("first page wrong: count=%d first=%+v cursor=%q", len(page.People), page.People[0], page.NextCursor)
+	}
+	second, err := profiles.SearchPeople(ctx, viewerID, prefix+"mUmBaI", page.NextCursor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(second.People) != 1 || second.People[0].ID != ids[21] || second.NextCursor != "" {
+		t.Fatalf("second page wrong: %+v", second)
+	}
+	byHeadline, err := profiles.SearchPeople(ctx, viewerID, prefix+"illustrator", "")
+	if err != nil || len(byHeadline.People) != 1 || byHeadline.People[0].ID != ids[22] {
+		t.Fatalf("headline search wrong: %+v %v", byHeadline, err)
+	}
+	byName, err := profiles.SearchPeople(ctx, viewerID, "pErSoN 21 "+prefix, "")
+	if err != nil || len(byName.People) != 1 || byName.People[0].ID != ids[21] {
+		t.Fatalf("name search wrong: %+v %v", byName, err)
+	}
+	noResults, err := profiles.SearchPeople(ctx, viewerID, prefix+"absent", "")
+	if err != nil || len(noResults.People) != 0 || noResults.NextCursor != "" {
+		t.Fatalf("empty search wrong: %+v %v", noResults, err)
+	}
+	public, err := profiles.PublicProfile(ctx, ids[22])
+	if err != nil || public.ID != ids[22] || public.City != "Pune" {
+		t.Fatalf("public profile wrong: %+v %v", public, err)
+	}
+	if _, err := profiles.PublicProfile(ctx, prefix+"missing"); err != api.ErrProfileNotFound {
+		t.Fatalf("missing public profile error = %v", err)
+	}
+}

@@ -5,7 +5,7 @@ export class SessionExpiredError extends Error {
   constructor() { super('Your session has ended. Please sign in again.'); }
 }
 
-function parseProfile(value: unknown): Profile {
+export function parseProfile(value: unknown): Profile {
   if (typeof value !== 'object' || value === null || !('id' in value) || typeof value.id !== 'string' ||
     !('displayName' in value) || typeof value.displayName !== 'string' ||
     !('city' in value) || typeof value.city !== 'string' ||

@@ -31,6 +31,8 @@ type ProfileInput struct {
 type ProfileStore interface {
 	FindOrCreate(ctx context.Context, clerkUserID string) (Profile, error)
 	Update(ctx context.Context, clerkUserID string, input ProfileInput) (Profile, error)
+	SearchPeople(ctx context.Context, viewerID, query, cursor string) (PeoplePage, error)
+	PublicProfile(ctx context.Context, id string) (Profile, error)
 }
 
 type Middleware func(http.Handler) http.Handler
@@ -103,6 +105,7 @@ func NewHandler(profiles ProfileStore, authenticate Middleware) http.Handler {
 			log.Printf("encode profile: %v", err)
 		}
 	})))
+	registerPeopleRoutes(mux, profiles, authenticate)
 	return mux
 }
 

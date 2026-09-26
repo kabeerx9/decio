@@ -10,10 +10,14 @@ import (
 )
 
 type fakeProfiles struct {
-	requestedID string
-	profile     Profile
-	err         error
-	updated     ProfileInput
+	requestedID  string
+	profile      Profile
+	err          error
+	updated      ProfileInput
+	searchQuery  string
+	searchCursor string
+	searchResult PeoplePage
+	publicID     string
 }
 
 func (f *fakeProfiles) FindOrCreate(_ context.Context, id string) (Profile, error) {
@@ -25,6 +29,16 @@ func (f *fakeProfiles) Update(_ context.Context, id string, input ProfileInput) 
 	f.requestedID = id
 	f.updated = input
 	return Profile{ID: id, DisplayName: input.DisplayName, City: input.City, Bio: input.Bio, Headline: input.Headline, Interests: input.Interests}, f.err
+}
+
+func (f *fakeProfiles) SearchPeople(_ context.Context, viewerID, query, cursor string) (PeoplePage, error) {
+	f.requestedID, f.searchQuery, f.searchCursor = viewerID, query, cursor
+	return f.searchResult, f.err
+}
+
+func (f *fakeProfiles) PublicProfile(_ context.Context, id string) (Profile, error) {
+	f.publicID = id
+	return f.profile, f.err
 }
 
 func testAuth(next http.Handler) http.Handler {
@@ -152,5 +166,70 @@ func TestPutMeDoesNotLeakStorageErrors(t *testing.T) {
 	NewHandler(profiles, testAuth).ServeHTTP(response, request)
 	if response.Code != http.StatusInternalServerError || strings.Contains(response.Body.String(), "private") {
 		t.Fatalf("storage error leaked: %d %s", response.Code, response.Body.String())
+	}
+}
+
+func TestPeopleSearchUsesVerifiedViewerAndReturnsPage(t *testing.T) {
+	profiles := &fakeProfiles{searchResult: PeoplePage{People: []Profile{{ID: "other", DisplayName: "Asha", City: "Mumbai", Interests: []string{}}}, NextCursor: "other"}}
+	request := httptest.NewRequest(http.MethodGet, "/v1/people?q=+mUmbai+&cursor=before", nil)
+	request.Header.Set("Authorization", "Bearer good-session")
+	response := httptest.NewRecorder()
+	NewHandler(profiles, testAuth).ServeHTTP(response, request)
+	if response.Code != http.StatusOK || profiles.requestedID != "user_from_verified_token" || profiles.searchQuery != "mUmbai" || profiles.searchCursor != "before" {
+		t.Fatalf("search status=%d viewer=%q query=%q cursor=%q", response.Code, profiles.requestedID, profiles.searchQuery, profiles.searchCursor)
+	}
+	if !strings.Contains(response.Body.String(), `"displayName":"Asha"`) || !strings.Contains(response.Body.String(), `"nextCursor":"other"`) {
+		t.Fatalf("unexpected search page: %s", response.Body.String())
+	}
+}
+
+func TestPeopleSearchRequiresSessionAndBoundsQuery(t *testing.T) {
+	for _, test := range []struct {
+		path, token string
+		want        int
+	}{
+		{"/v1/people?q=Mumbai", "", http.StatusUnauthorized},
+		{"/v1/people?q=" + strings.Repeat("x", 81), "Bearer good-session", http.StatusBadRequest},
+	} {
+		profiles := &fakeProfiles{}
+		request := httptest.NewRequest(http.MethodGet, test.path, nil)
+		request.Header.Set("Authorization", test.token)
+		response := httptest.NewRecorder()
+		NewHandler(profiles, testAuth).ServeHTTP(response, request)
+		if response.Code != test.want || profiles.requestedID != "" {
+			t.Fatalf("path=%q status=%d storage viewer=%q", test.path, response.Code, profiles.requestedID)
+		}
+	}
+}
+
+func TestPublicProfileShowsOnlyPublicFields(t *testing.T) {
+	profiles := &fakeProfiles{profile: Profile{ID: "other", DisplayName: "Asha", City: "Mumbai", Bio: "Hello", Interests: []string{"Go"}}}
+	request := httptest.NewRequest(http.MethodGet, "/v1/people/other", nil)
+	request.Header.Set("Authorization", "Bearer good-session")
+	response := httptest.NewRecorder()
+	NewHandler(profiles, testAuth).ServeHTTP(response, request)
+	if response.Code != http.StatusOK || profiles.publicID != "other" || strings.Contains(response.Body.String(), "email") || !strings.Contains(response.Body.String(), `"bio":"Hello"`) {
+		t.Fatalf("public profile status=%d id=%q body=%s", response.Code, profiles.publicID, response.Body.String())
+	}
+}
+
+func TestPublicProfileMissingReturns404(t *testing.T) {
+	profiles := &fakeProfiles{err: ErrProfileNotFound}
+	request := httptest.NewRequest(http.MethodGet, "/v1/people/missing", nil)
+	request.Header.Set("Authorization", "Bearer good-session")
+	response := httptest.NewRecorder()
+	NewHandler(profiles, testAuth).ServeHTTP(response, request)
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestPublicProfileRequiresSession(t *testing.T) {
+	profiles := &fakeProfiles{}
+	request := httptest.NewRequest(http.MethodGet, "/v1/people/other", nil)
+	response := httptest.NewRecorder()
+	NewHandler(profiles, testAuth).ServeHTTP(response, request)
+	if response.Code != http.StatusUnauthorized || profiles.publicID != "" {
+		t.Fatalf("unauthorized profile read reached storage: status=%d id=%q", response.Code, profiles.publicID)
 	}
 }

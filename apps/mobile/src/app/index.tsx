@@ -2,13 +2,14 @@ import { useAuth, useUser } from '@clerk/expo';
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { fetchMyProfile, Profile, ProfileInput, saveMyProfile, SessionExpiredError } from '@/lib/profile-api';
 import { AuthScreen } from '@/screens/auth';
 import { ProfileEditor } from '@/screens/profile-editor';
+import { PeopleDiscover } from '@/screens/people-discover';
 import { colors, fonts } from '@/theme';
 
 const apiUrl = process.env.EXPO_PUBLIC_API_URL;
@@ -37,7 +38,7 @@ export default function HomeScreen() {
     },
     onError: (failure) => {
       if (failure instanceof SessionExpiredError) {
-        queryClient.removeQueries({ queryKey: ['profile'] });
+        queryClient.clear();
         void signOut();
       }
     },
@@ -45,16 +46,16 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (profileError instanceof SessionExpiredError) {
-      queryClient.removeQueries({ queryKey: ['profile'] });
+      queryClient.clear();
       void signOut();
     }
   }, [profileError, queryClient, signOut]);
 
   useEffect(() => {
-    if (!isSignedIn) queryClient.removeQueries({ queryKey: ['profile'] });
+    if (!isSignedIn) queryClient.clear();
   }, [isSignedIn, queryClient]);
 
-  const signOutLocal = () => { queryClient.removeQueries({ queryKey: ['profile'] }); void signOut(); };
+  const signOutLocal = useCallback(() => { queryClient.clear(); void signOut(); }, [queryClient, signOut]);
 
   if (!isLoaded) return <CenteredLoading />;
   if (!isSignedIn) return showAuth ? <AuthScreen onBack={() => setShowAuth(false)} /> : <WelcomeScreen onContinue={() => setShowAuth(true)} />;
@@ -65,7 +66,7 @@ export default function HomeScreen() {
     <View style={styles.topbar}><Brand /><View style={styles.edition}><View style={styles.editionDot} /><Text style={styles.editionText}>THE CITY EDITION</Text></View></View>
     {profilePending && !profile && apiUrl ? <CenteredLoading /> : profileError || !apiUrl ?
       <View style={styles.centered}><Ionicons name="cloud-offline-outline" size={30} color={colors.blue} /><Text style={styles.errorTitle}>Profile unavailable</Text><Text style={styles.bodyMuted}>{profileError?.message ?? 'Set EXPO_PUBLIC_API_URL in apps/mobile/.env.local'}</Text><Pressable style={styles.secondaryButton} onPress={signOutLocal}><Text style={styles.secondaryButtonText}>Sign out</Text></Pressable></View> :
-      tab === 'discover' ? <Discover name={name} city={profile?.city ?? ''} onProfile={() => setTab('profile')} /> :
+      tab === 'discover' ? <PeopleDiscover apiUrl={apiUrl} userId={userId!} city={profile?.city ?? ''} getToken={getToken} onMyProfile={() => setTab('profile')} onSessionExpired={signOutLocal} /> :
         <ProfileScreen profile={profile ?? null} name={name} email={user?.primaryEmailAddress?.emailAddress ?? ''} onEdit={() => setEditing(true)} onSignOut={signOutLocal} />}
     <View style={styles.tabbar} accessibilityRole="tablist">
       <Pressable accessibilityRole="tab" accessibilityState={{ selected: tab === 'discover' }} style={styles.tab} onPress={() => setTab('discover')}><Ionicons name={tab === 'discover' ? 'compass' : 'compass-outline'} size={22} color={tab === 'discover' ? colors.blue : colors.muted} /><Text style={[styles.tabLabel, tab === 'discover' && styles.tabSelected]}>Discover</Text></Pressable>
@@ -84,15 +85,6 @@ function WelcomeScreen({ onContinue }: { onContinue: () => void }) {
     <View style={styles.welcomeContent}><Text style={styles.eyebrow}>A MORE CONNECTED CITY</Text><Text style={styles.welcomeTitle}>Good things{'\n'}happen when{'\n'}we meet.</Text><Text style={styles.welcomeDescription}>Discover people nearby, make meaningful connections, and find your place in the city.</Text></View>
     <View style={styles.welcomeActions}><Pressable style={styles.primaryButton} onPress={onContinue}><Text style={styles.primaryButtonText}>Find your people</Text><Ionicons name="arrow-forward" color={colors.white} size={20} /></Pressable><Pressable style={styles.signInButton} onPress={onContinue}><Text style={styles.signInText}>Already here? <Text style={styles.signInEmphasis}>Sign in</Text></Text></Pressable></View>
   </SafeAreaView>;
-}
-
-function Discover({ name, city, onProfile }: { name: string; city: string; onProfile: () => void }) {
-  return <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-    <View style={styles.pageIntro}><Text style={styles.eyebrow}>YOUR NEXT CONNECTION STARTS HERE</Text><Text style={styles.pageTitle}>Hello, {name}.</Text><Text style={styles.introCopy}>A city is better when you know its people.</Text></View>
-    <View style={styles.discoverHero}><Image source={{ uri: cityImage }} style={StyleSheet.absoluteFill} contentFit="cover" accessibilityLabel="City skyline at dusk" /><View style={styles.photoShade} /><View style={styles.heroLabel}><Ionicons name="location-sharp" color={colors.ink} size={13} /><Text style={styles.heroLabelText}>{city || 'YOUR CITY AWAITS'}</Text></View><Text style={styles.heroTitle}>Make the city{'\n'}feel smaller.</Text><Text style={styles.heroCaption}>Start with your profile. People and search are coming next.</Text></View>
-    <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>Your starting point</Text><Text style={styles.sectionNumber}>01 / 01</Text></View>
-    <Pressable style={styles.nextStep} onPress={onProfile}><View style={styles.stepIcon}><Ionicons name="person-outline" color={colors.blue} size={21} /></View><View style={styles.stepText}><Text style={styles.stepTitle}>Your profile</Text><Text style={styles.stepDescription}>Your identity in the Decio community</Text></View><Ionicons name="arrow-forward" color={colors.blue} size={20} /></Pressable>
-  </ScrollView>;
 }
 
 function ProfileScreen({ profile, name, email, onEdit, onSignOut }: { profile: Profile | null; name: string; email: string; onEdit: () => void; onSignOut: () => void }) {
