@@ -20,6 +20,14 @@ func TestAllowOrigins(t *testing.T) {
 	if response.Code != http.StatusNoContent || response.Header().Get("Access-Control-Allow-Origin") != "http://localhost:8081" || response.Header().Get("Access-Control-Allow-Headers") == "" {
 		t.Fatalf("allowed preflight: %d, headers %v", response.Code, response.Header())
 	}
+	postPreflight := httptest.NewRequest(http.MethodOptions, "/v1/posts", nil)
+	postPreflight.Header.Set("Origin", "http://localhost:8081")
+	postPreflight.Header.Set("Access-Control-Request-Method", "POST")
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, postPreflight)
+	if response.Code != http.StatusNoContent || response.Header().Get("Access-Control-Allow-Methods") != "GET, PUT, POST" {
+		t.Fatalf("post preflight: %d, headers %v", response.Code, response.Header())
+	}
 
 	for _, origin := range []string{"https://evil.example", ""} {
 		request := httptest.NewRequest(http.MethodGet, "/v1/me", nil)

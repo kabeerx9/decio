@@ -38,6 +38,7 @@ type ProfileStore interface {
 type Store interface {
 	ProfileStore
 	ConnectionStore
+	PostStore
 }
 
 type Middleware func(http.Handler) http.Handler
@@ -112,6 +113,7 @@ func NewHandler(profiles Store, authenticate Middleware) http.Handler {
 	})))
 	registerPeopleRoutes(mux, profiles, authenticate)
 	registerConnectionRoutes(mux, profiles, authenticate)
+	registerPostRoutes(mux, profiles, authenticate)
 	return mux
 }
 

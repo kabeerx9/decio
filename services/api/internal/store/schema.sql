@@ -27,3 +27,19 @@ CREATE TABLE IF NOT EXISTS connections (
 CREATE INDEX IF NOT EXISTS connections_recipient_idx ON connections (recipient_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS connections_requester_idx ON connections (requester_id, created_at DESC);
 ALTER TABLE connections ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS city_posts (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    author_id TEXT NOT NULL REFERENCES profiles(id),
+    city TEXT NOT NULL,
+    body TEXT NOT NULL,
+    photo BYTEA,
+    photo_type TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CHECK (length(city) > 0),
+    CHECK (length(body) > 0),
+    CHECK (octet_length(photo) <= 2097152),
+    CHECK ((photo IS NULL) = (photo_type IS NULL))
+);
+CREATE INDEX IF NOT EXISTS city_posts_city_id_idx ON city_posts (lower(city), id DESC);
+ALTER TABLE city_posts ENABLE ROW LEVEL SECURITY;

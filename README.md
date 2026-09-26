@@ -1,6 +1,6 @@
 # Decio Update
 
-A people-first city network rebuilt with Expo, Go, Clerk, Postgres, and later Ably. The first milestone is intentionally small: sign-in, profile, people search, connections, city posts, and direct chat. The current code implements sign-in, profile editing, people search, and connection requests.
+A people-first city network rebuilt with Expo, Go, Clerk, Postgres, and later Ably. The first milestone is intentionally small: sign-in, profile, people search, connections, city posts, and direct chat. The current code implements sign-in, profile editing, people search, connection requests, and city posts.
 
 ## Project map
 
@@ -42,6 +42,8 @@ The API creates or extends the `profiles` table on startup. `GET /health` is pub
 `GET /v1/people?q=<text>&cursor=<id>` requires the same token. It searches completed profiles by name, city, or headline, excludes the caller, and returns `{ "people": [...], "nextCursor": "" }` in pages of at most 20. An empty `q` lists completed profiles. Pass a nonempty `nextCursor` to fetch the next page. `GET /v1/people/{id}` returns one completed public profile or 404. Search uses stable ID order rather than relevance ranking for now.
 
 `GET /v1/connections` returns `{ "connections": [{ "other": <public profile>, "status": "incoming|sent|accepted" }] }` for the signed-in user. `POST /v1/connections` with `{ "userId": "<recipient Clerk ID>" }` creates a pending request; the sender needs a completed profile. `POST /v1/connections/{requesterId}/accept` accepts only a pending request addressed to the signed-in user. A unique unordered user pair prevents duplicate and reverse-direction requests, including simultaneous writes. The new `connections` table is created by the API at startup and remains in the database after a code revert. There is no notification or realtime delivery in this slice; recipients can refresh the Connections section to see new requests.
+
+`POST /v1/posts` accepts `multipart/form-data` with required `body` (1–1000 characters) and at most one optional `photo`. The server derives the city from the verified author's completed profile. Photos are decoded, checked, stripped of metadata, and stored in Postgres as JPEG or PNG with a 2 MB output cap. `GET /v1/posts?cursor=<postId>` returns `{ "city", "posts": [...], "nextCursor" }` in pages of at most 20, filtered to the viewer's current profile city. Each post includes a string `id`, author ID and name, city, body, `hasPhoto`, and creation time. `GET /v1/posts/{id}/photo` requires a session and allows only a viewer whose current city matches the post city. An unset city yields an empty feed and blocks creation. The `city_posts` table is created on API startup and persists after a code revert. Photo bytes in Postgres keep this milestone simple, but a separate object store will be preferable as image volume grows.
 
 `CORS_ALLOWED_ORIGINS` is a comma-separated list of exact browser origins. The example permits Expo web at `http://localhost:8081`; native iOS and Android requests do not use CORS.
 

@@ -21,6 +21,27 @@ type fakeProfiles struct {
 	connectionRequester string
 	connectionRecipient string
 	connectionResult    []Connection
+	postResult          Post
+	postPage            PostPage
+	postBody            string
+	postPhoto           []byte
+	postKind            string
+	postCursor          string
+}
+
+func (f *fakeProfiles) CreatePost(_ context.Context, id, body string, photo []byte, kind string) (Post, error) {
+	f.requestedID, f.postBody, f.postPhoto, f.postKind = id, body, photo, kind
+	return f.postResult, f.err
+}
+
+func (f *fakeProfiles) ListPosts(_ context.Context, id, cursor string) (PostPage, error) {
+	f.requestedID, f.postCursor = id, cursor
+	return f.postPage, f.err
+}
+
+func (f *fakeProfiles) PostPhoto(_ context.Context, id, postID string) ([]byte, string, error) {
+	f.requestedID, f.publicID = id, postID
+	return f.postPhoto, f.postKind, f.err
 }
 
 func (f *fakeProfiles) FindOrCreate(_ context.Context, id string) (Profile, error) {

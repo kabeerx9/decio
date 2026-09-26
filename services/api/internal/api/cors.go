@@ -21,11 +21,11 @@ func AllowOrigins(origins []string) Middleware {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			if r.Method == http.MethodOptions && r.Header.Get("Access-Control-Request-Method") != "" {
 				requestedMethod := r.Header.Get("Access-Control-Request-Method")
-				if requestedMethod != http.MethodGet && requestedMethod != http.MethodPut {
+				if requestedMethod != http.MethodGet && requestedMethod != http.MethodPut && requestedMethod != http.MethodPost {
 					http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 					return
 				}
-				w.Header().Set("Access-Control-Allow-Methods", "GET, PUT")
+				w.Header().Set("Access-Control-Allow-Methods", "GET, PUT, POST")
 				w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
 				w.WriteHeader(http.StatusNoContent)
 				return

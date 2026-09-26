@@ -10,11 +10,12 @@ import { fetchMyProfile, Profile, ProfileInput, saveMyProfile, SessionExpiredErr
 import { AuthScreen } from '@/screens/auth';
 import { ProfileEditor } from '@/screens/profile-editor';
 import { PeopleDiscover } from '@/screens/people-discover';
+import { CityFeed } from '@/screens/city-feed';
 import { colors, fonts } from '@/theme';
 
 const apiUrl = process.env.EXPO_PUBLIC_API_URL;
 const cityImage = 'https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=1200&q=85';
-type Tab = 'discover' | 'profile';
+type Tab = 'discover' | 'feed' | 'profile';
 
 export default function HomeScreen() {
   const { isLoaded, isSignedIn, userId, getToken, signOut } = useAuth();
@@ -66,10 +67,11 @@ export default function HomeScreen() {
     <View style={styles.topbar}><Brand /><View style={styles.edition}><View style={styles.editionDot} /><Text style={styles.editionText}>THE CITY EDITION</Text></View></View>
     {profilePending && !profile && apiUrl ? <CenteredLoading /> : profileError || !apiUrl ?
       <View style={styles.centered}><Ionicons name="cloud-offline-outline" size={30} color={colors.blue} /><Text style={styles.errorTitle}>Profile unavailable</Text><Text style={styles.bodyMuted}>{profileError?.message ?? 'Set EXPO_PUBLIC_API_URL in apps/mobile/.env.local'}</Text><Pressable style={styles.secondaryButton} onPress={signOutLocal}><Text style={styles.secondaryButtonText}>Sign out</Text></Pressable></View> :
-      tab === 'discover' ? <PeopleDiscover apiUrl={apiUrl} userId={userId!} city={profile?.city ?? ''} getToken={getToken} onMyProfile={() => setTab('profile')} onSessionExpired={signOutLocal} /> :
+      tab === 'discover' ? <PeopleDiscover apiUrl={apiUrl} userId={userId!} city={profile?.city ?? ''} getToken={getToken} onMyProfile={() => setTab('profile')} onSessionExpired={signOutLocal} /> : tab === 'feed' ? <CityFeed apiUrl={apiUrl} userId={userId!} city={profile?.city ?? ''} getToken={getToken} onMyProfile={() => setTab('profile')} onSessionExpired={signOutLocal} /> :
         <ProfileScreen profile={profile ?? null} name={name} email={user?.primaryEmailAddress?.emailAddress ?? ''} onEdit={() => setEditing(true)} onSignOut={signOutLocal} />}
     <View style={styles.tabbar} accessibilityRole="tablist">
       <Pressable accessibilityRole="tab" accessibilityState={{ selected: tab === 'discover' }} style={styles.tab} onPress={() => setTab('discover')}><Ionicons name={tab === 'discover' ? 'compass' : 'compass-outline'} size={22} color={tab === 'discover' ? colors.blue : colors.muted} /><Text style={[styles.tabLabel, tab === 'discover' && styles.tabSelected]}>Discover</Text></Pressable>
+      <Pressable accessibilityRole="tab" accessibilityState={{ selected: tab === 'feed' }} style={styles.tab} onPress={() => setTab('feed')}><Ionicons name={tab === 'feed' ? 'newspaper' : 'newspaper-outline'} size={22} color={tab === 'feed' ? colors.blue : colors.muted} /><Text style={[styles.tabLabel, tab === 'feed' && styles.tabSelected]}>City feed</Text></Pressable>
       <Pressable accessibilityRole="tab" accessibilityState={{ selected: tab === 'profile' }} style={styles.tab} onPress={() => setTab('profile')}><Ionicons name={tab === 'profile' ? 'person-circle' : 'person-circle-outline'} size={22} color={tab === 'profile' ? colors.blue : colors.muted} /><Text style={[styles.tabLabel, tab === 'profile' && styles.tabSelected]}>Profile</Text></Pressable>
     </View>
   </SafeAreaView>;

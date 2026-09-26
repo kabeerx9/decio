@@ -37,7 +37,13 @@
       ],
       "@clerk/expo",
       "expo-secure-store",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Decio to choose a photo for your city post."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
