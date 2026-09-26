@@ -2,7 +2,14 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { SessionExpiredError } from './profile-api';
-import { fetchRealtimeToken } from './realtime-api';
+import { fetchRealtimeToken, messageChangeOtherUserId } from './realtime-api';
+
+test('reads message events from Ably object or JSON string data', () => {
+  assert.equal(messageChangeOtherUserId({ otherUserId: 'friend', messageId: '1' }), 'friend');
+  assert.equal(messageChangeOtherUserId('{"otherUserId":"friend","messageId":"1"}'), 'friend');
+  assert.equal(messageChangeOtherUserId('bad-json'), null);
+  assert.equal(messageChangeOtherUserId({ otherUserId: 123 }), null);
+});
 
 test('requests a signed Ably token using the Clerk session', async () => {
   let path = '';

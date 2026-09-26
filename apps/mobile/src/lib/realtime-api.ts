@@ -2,6 +2,19 @@ import type { TokenRequest } from 'ably';
 
 import { SessionExpiredError } from './profile-api';
 
+export function messageChangeOtherUserId(data: unknown): string | null {
+  let payload = data;
+  if (typeof payload === 'string') {
+    try {
+      payload = JSON.parse(payload) as unknown;
+    } catch {
+      return null;
+    }
+  }
+  if (typeof payload !== 'object' || payload === null || !('otherUserId' in payload)) return null;
+  return typeof payload.otherUserId === 'string' && payload.otherUserId.length > 0 ? payload.otherUserId : null;
+}
+
 export async function fetchRealtimeToken(apiUrl: string, getToken: () => Promise<string | null>, request: typeof fetch = fetch): Promise<TokenRequest> {
   const session = await getToken();
   if (!session) throw new SessionExpiredError();

@@ -28,6 +28,23 @@ CREATE INDEX IF NOT EXISTS connections_recipient_idx ON connections (recipient_i
 CREATE INDEX IF NOT EXISTS connections_requester_idx ON connections (requester_id, created_at DESC);
 ALTER TABLE connections ENABLE ROW LEVEL SECURITY;
 
+CREATE TABLE IF NOT EXISTS direct_messages (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    user_low TEXT NOT NULL REFERENCES profiles(id),
+    user_high TEXT NOT NULL REFERENCES profiles(id),
+    sender_id TEXT NOT NULL REFERENCES profiles(id),
+    client_message_id TEXT NOT NULL,
+    body TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CHECK (user_low < user_high),
+    CHECK (sender_id = user_low OR sender_id = user_high),
+    CHECK (length(body) BETWEEN 1 AND 2000),
+    CHECK (length(client_message_id) BETWEEN 1 AND 64),
+    UNIQUE (sender_id, client_message_id)
+);
+CREATE INDEX IF NOT EXISTS direct_messages_pair_id_idx ON direct_messages (user_low, user_high, id DESC);
+ALTER TABLE direct_messages ENABLE ROW LEVEL SECURITY;
+
 CREATE TABLE IF NOT EXISTS city_posts (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     author_id TEXT NOT NULL REFERENCES profiles(id),

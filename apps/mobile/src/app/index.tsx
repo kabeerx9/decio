@@ -7,22 +7,23 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { fetchMyProfile, Profile, ProfileInput, saveMyProfile, SessionExpiredError } from '@/lib/profile-api';
-import { useConnectionEvents } from '@/lib/use-connection-events';
+import { useUserEvents } from '@/lib/use-user-events';
 import { AuthScreen } from '@/screens/auth';
 import { ProfileEditor } from '@/screens/profile-editor';
 import { PeopleDiscover } from '@/screens/people-discover';
 import { CityFeed } from '@/screens/city-feed';
+import { Chats } from '@/screens/chats';
 import { colors, fonts } from '@/theme';
 
 const apiUrl = process.env.EXPO_PUBLIC_API_URL;
 const cityImage = 'https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=1200&q=85';
-type Tab = 'discover' | 'feed' | 'profile';
+type Tab = 'discover' | 'feed' | 'chat' | 'profile';
 
 export default function HomeScreen() {
   const { isLoaded, isSignedIn, userId, getToken, signOut } = useAuth();
   const { user } = useUser();
   const queryClient = useQueryClient();
-  useConnectionEvents(isLoaded && isSignedIn ? apiUrl : undefined, userId, getToken);
+  useUserEvents(isLoaded && isSignedIn ? apiUrl : undefined, userId, getToken);
   const [showAuth, setShowAuth] = useState(false);
   const [tab, setTab] = useState<Tab>('discover');
   const [editing, setEditing] = useState(false);
@@ -69,11 +70,12 @@ export default function HomeScreen() {
     <View style={styles.topbar}><Brand /><View style={styles.edition}><View style={styles.editionDot} /><Text style={styles.editionText}>THE CITY EDITION</Text></View></View>
     {profilePending && !profile && apiUrl ? <CenteredLoading /> : profileError || !apiUrl ?
       <View style={styles.centered}><Ionicons name="cloud-offline-outline" size={30} color={colors.blue} /><Text style={styles.errorTitle}>Profile unavailable</Text><Text style={styles.bodyMuted}>{profileError?.message ?? 'Set EXPO_PUBLIC_API_URL in apps/mobile/.env.local'}</Text><Pressable style={styles.secondaryButton} onPress={signOutLocal}><Text style={styles.secondaryButtonText}>Sign out</Text></Pressable></View> :
-      tab === 'discover' ? <PeopleDiscover apiUrl={apiUrl} userId={userId!} city={profile?.city ?? ''} getToken={getToken} onMyProfile={() => setTab('profile')} onSessionExpired={signOutLocal} /> : tab === 'feed' ? <CityFeed apiUrl={apiUrl} userId={userId!} city={profile?.city ?? ''} getToken={getToken} onMyProfile={() => setTab('profile')} onSessionExpired={signOutLocal} /> :
+      tab === 'discover' ? <PeopleDiscover apiUrl={apiUrl} userId={userId!} city={profile?.city ?? ''} getToken={getToken} onMyProfile={() => setTab('profile')} onSessionExpired={signOutLocal} /> : tab === 'feed' ? <CityFeed apiUrl={apiUrl} userId={userId!} city={profile?.city ?? ''} getToken={getToken} onMyProfile={() => setTab('profile')} onSessionExpired={signOutLocal} /> : tab === 'chat' ? <Chats apiUrl={apiUrl} userId={userId!} getToken={getToken} onSessionExpired={signOutLocal} /> :
         <ProfileScreen profile={profile ?? null} name={name} email={user?.primaryEmailAddress?.emailAddress ?? ''} onEdit={() => setEditing(true)} onSignOut={signOutLocal} />}
     <View style={styles.tabbar} accessibilityRole="tablist">
       <Pressable accessibilityRole="tab" accessibilityState={{ selected: tab === 'discover' }} style={styles.tab} onPress={() => setTab('discover')}><Ionicons name={tab === 'discover' ? 'compass' : 'compass-outline'} size={22} color={tab === 'discover' ? colors.blue : colors.muted} /><Text style={[styles.tabLabel, tab === 'discover' && styles.tabSelected]}>Discover</Text></Pressable>
       <Pressable accessibilityRole="tab" accessibilityState={{ selected: tab === 'feed' }} style={styles.tab} onPress={() => setTab('feed')}><Ionicons name={tab === 'feed' ? 'newspaper' : 'newspaper-outline'} size={22} color={tab === 'feed' ? colors.blue : colors.muted} /><Text style={[styles.tabLabel, tab === 'feed' && styles.tabSelected]}>City feed</Text></Pressable>
+      <Pressable accessibilityRole="tab" accessibilityState={{ selected: tab === 'chat' }} style={styles.tab} onPress={() => setTab('chat')}><Ionicons name={tab === 'chat' ? 'chatbubbles' : 'chatbubbles-outline'} size={22} color={tab === 'chat' ? colors.blue : colors.muted} /><Text style={[styles.tabLabel, tab === 'chat' && styles.tabSelected]}>Messages</Text></Pressable>
       <Pressable accessibilityRole="tab" accessibilityState={{ selected: tab === 'profile' }} style={styles.tab} onPress={() => setTab('profile')}><Ionicons name={tab === 'profile' ? 'person-circle' : 'person-circle-outline'} size={22} color={tab === 'profile' ? colors.blue : colors.muted} /><Text style={[styles.tabLabel, tab === 'profile' && styles.tabSelected]}>Profile</Text></Pressable>
     </View>
   </SafeAreaView>;
@@ -112,7 +114,7 @@ const styles = StyleSheet.create({
   scrollContent: { paddingBottom: 28 }, pageIntro: { paddingHorizontal: 24, paddingTop: 32, paddingBottom: 26 }, pageTitle: { fontFamily: fonts.display, color: colors.ink, fontSize: 38, letterSpacing: -1.5, marginTop: 8 }, introCopy: { fontFamily: fonts.body, color: colors.muted, fontSize: 15, marginTop: 4 },
   discoverHero: { height: 285, marginHorizontal: 16, borderRadius: 20, overflow: 'hidden', padding: 24, justifyContent: 'flex-end' }, heroLabel: { backgroundColor: colors.yellow, borderRadius: 50, paddingHorizontal: 12, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 5, marginBottom: 18 }, heroLabelText: { color: colors.ink, fontFamily: fonts.medium, fontSize: 10, letterSpacing: 0.8 }, heroTitle: { color: colors.white, fontFamily: fonts.display, fontSize: 31, lineHeight: 35, letterSpacing: -0.8 }, heroCaption: { color: colors.white, fontFamily: fonts.body, fontSize: 13, marginTop: 7, lineHeight: 19, maxWidth: 275 },
   sectionHeader: { paddingHorizontal: 24, paddingTop: 32, paddingBottom: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, sectionTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 22, letterSpacing: -0.5 }, sectionNumber: { color: colors.muted, fontFamily: fonts.medium, fontSize: 10, letterSpacing: 1 }, nextStep: { marginHorizontal: 16, backgroundColor: colors.white, borderColor: colors.line, borderWidth: 1, borderRadius: 16, minHeight: 86, flexDirection: 'row', alignItems: 'center', gap: 13, paddingHorizontal: 17 }, stepIcon: { width: 44, height: 44, borderRadius: 12, backgroundColor: colors.paleBlue, alignItems: 'center', justifyContent: 'center' }, stepText: { flex: 1 }, stepTitle: { color: colors.ink, fontFamily: fonts.medium, fontSize: 15 }, stepDescription: { color: colors.muted, fontFamily: fonts.body, fontSize: 12, marginTop: 3 },
-  tabbar: { borderTopWidth: 1, borderColor: colors.line, backgroundColor: colors.white, flexDirection: 'row', minHeight: 64, paddingHorizontal: 36 }, tab: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2 }, tabLabel: { fontFamily: fonts.medium, color: colors.muted, fontSize: 11 }, tabSelected: { color: colors.blue },
+  tabbar: { borderTopWidth: 1, borderColor: colors.line, backgroundColor: colors.white, flexDirection: 'row', minHeight: 64, paddingHorizontal: 12 }, tab: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2 }, tabLabel: { fontFamily: fonts.medium, color: colors.muted, fontSize: 11 }, tabSelected: { color: colors.blue },
   profileCard: { marginHorizontal: 16, borderRadius: 20, padding: 23, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line }, avatar: { width: 68, height: 68, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.yellow, marginBottom: 15 }, avatarText: { fontFamily: fonts.display, fontSize: 30, color: colors.ink }, profileName: { fontFamily: fonts.display, color: colors.ink, fontSize: 26 }, profileEmail: { fontFamily: fonts.body, color: colors.muted, fontSize: 14, marginTop: 3 }, profileRule: { height: 1, backgroundColor: colors.line, marginVertical: 22 }, detailRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 17, gap: 15 }, detailLabel: { fontFamily: fonts.medium, color: colors.muted, fontSize: 10, letterSpacing: 1.1, marginTop: 3 }, detailValue: { fontFamily: fonts.medium, color: colors.ink, fontSize: 12, textAlign: 'right', flexShrink: 1 }, profileNote: { fontFamily: fonts.body, color: colors.muted, fontSize: 13, lineHeight: 20, marginHorizontal: 25, marginTop: 22 }, secondaryButton: { minHeight: 49, marginHorizontal: 16, marginTop: 25, borderRadius: 13, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.white, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }, secondaryButtonText: { fontFamily: fonts.medium, color: colors.ink, fontSize: 14 }, errorTitle: { fontFamily: fonts.display, color: colors.ink, fontSize: 23 }, bodyMuted: { fontFamily: fonts.body, color: colors.muted, fontSize: 14, textAlign: 'center' },
   profileBio: { color: colors.ink, fontFamily: fonts.body, fontSize: 14, lineHeight: 21 }, profileInterests: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginTop: 15 }, profileInterest: { color: colors.blue, backgroundColor: colors.paleBlue, borderRadius: 100, paddingHorizontal: 11, paddingVertical: 7, fontFamily: fonts.medium, fontSize: 11 }, editButton: { minHeight: 52, marginHorizontal: 16, marginTop: 20, paddingHorizontal: 17, borderRadius: 14, backgroundColor: colors.blue, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, editButtonText: { color: colors.white, fontFamily: fonts.medium, fontSize: 15 },
 });

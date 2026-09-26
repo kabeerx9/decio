@@ -22,6 +22,12 @@ type fakeProfiles struct {
 	connectionRequester string
 	connectionRecipient string
 	connectionResult    []domain.Connection
+	messageResult       domain.DirectMessage
+	messagePage         domain.MessagePage
+	messageOtherID      string
+	messageClientID     string
+	messageBody         string
+	messageCursor       string
 	postResult          domain.Post
 	postPage            domain.PostPage
 	postBody            string
@@ -79,6 +85,16 @@ func (f *fakeProfiles) AcceptConnection(_ context.Context, recipientID, requeste
 func (f *fakeProfiles) ListConnections(_ context.Context, id string) ([]domain.Connection, error) {
 	f.requestedID = id
 	return f.connectionResult, f.err
+}
+
+func (f *fakeProfiles) SendMessage(_ context.Context, senderID, otherID, clientMessageID, body string) (domain.DirectMessage, error) {
+	f.requestedID, f.messageOtherID, f.messageClientID, f.messageBody = senderID, otherID, clientMessageID, body
+	return f.messageResult, f.err
+}
+
+func (f *fakeProfiles) ListMessages(_ context.Context, viewerID, otherID, cursor string) (domain.MessagePage, error) {
+	f.requestedID, f.messageOtherID, f.messageCursor = viewerID, otherID, cursor
+	return f.messagePage, f.err
 }
 
 func testAuth(next http.Handler) http.Handler {

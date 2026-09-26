@@ -54,7 +54,50 @@ func TestLiveAblyToken(t *testing.T) {
 	if token.ClientID != "decio_smoke" {
 		t.Fatalf("unexpected token identity: %q", token.ClientID)
 	}
+	realtimeClient, err := ably.NewRealtime(ably.WithKey(os.Getenv("ABLY_API_KEY")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer realtimeClient.Close()
+	received := make(chan *ably.Message, 1)
+	unsubscribe, err := realtimeClient.Channels.Get(Channel("decio_smoke")).Subscribe(ctx, "messages.changed", func(message *ably.Message) {
+		select {
+		case received <- message:
+		default:
+		}
+	})
+	if err != nil {
+		t.Fatalf("Ably rejected a message subscription: %v", err)
+	}
+	defer unsubscribe()
 	if err := client.PublishConnectionChange(ctx, "decio_smoke"); err != nil {
 		t.Fatalf("Ably rejected a connection event: %v", err)
+	}
+	if err := client.PublishMessageChange(ctx, "decio_smoke", "other_smoke", "1"); err != nil {
+		t.Fatalf("Ably rejected a message event: %v", err)
+	}
+	select {
+	case message := <-received:
+		var encoded []byte
+		if value, ok := message.Data.(string); ok {
+			encoded = []byte(value)
+		} else {
+			encoded, err = json.Marshal(message.Data)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		var payload struct {
+			OtherUserID string `json:"otherUserId"`
+			MessageID   string `json:"messageId"`
+		}
+		if err := json.Unmarshal(encoded, &payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload.OtherUserID != "other_smoke" || payload.MessageID != "1" {
+			t.Fatalf("unexpected message event: %+v", payload)
+		}
+	case <-ctx.Done():
+		t.Fatal("timed out waiting for a message event")
 	}
 }

@@ -1,0 +1,100 @@
+import { Ionicons } from '@expo/vector-icons';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import * as Crypto from 'expo-crypto';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+
+import { DirectMessage, fetchMessages, sendMessage } from '@/lib/chat-api';
+import { fetchConnections } from '@/lib/connections-api';
+import { Profile, SessionExpiredError } from '@/lib/profile-api';
+import { colors, fonts } from '@/theme';
+
+type Props = { apiUrl: string; userId: string; getToken: () => Promise<string | null>; onSessionExpired: () => void };
+
+export function Chats({ apiUrl, userId, getToken, onSessionExpired }: Props) {
+  const [other, setOther] = useState<Profile | null>(null);
+  const connections = useQuery({
+    queryKey: ['connections', userId],
+    queryFn: () => fetchConnections(apiUrl, getToken),
+    retry: (failures, error) => !(error instanceof SessionExpiredError) && failures < 1,
+  });
+  useEffect(() => { if (connections.error instanceof SessionExpiredError) onSessionExpired(); }, [connections.error, onSessionExpired]);
+  if (other) return <Conversation apiUrl={apiUrl} userId={userId} other={other} getToken={getToken} onBack={() => setOther(null)} onSessionExpired={onSessionExpired} />;
+  const people = (connections.data ?? []).filter((item) => item.status === 'accepted').map((item) => item.other);
+  return <View style={styles.page}>
+    <View style={styles.heading}><Text style={styles.eyebrow}>YOUR PEOPLE</Text><Text style={styles.title}>Messages</Text><Text style={styles.muted}>A place to pick up the conversation.</Text></View>
+    {connections.isPending ? <ActivityIndicator color={colors.blue} style={styles.loading} /> : connections.error ?
+      <View style={styles.empty}><Text style={styles.muted}>Could not load conversations.</Text><Pressable onPress={() => void connections.refetch()}><Text style={styles.link}>Try again</Text></Pressable></View> :
+      people.length === 0 ? <View style={styles.empty}><Ionicons name="chatbubbles-outline" size={32} color={colors.blue} /><Text style={styles.emptyTitle}>No conversations yet</Text><Text style={styles.muted}>Connect with someone in Discover to start chatting.</Text></View> :
+        <FlatList data={people} keyExtractor={(person) => person.id} contentContainerStyle={styles.list} renderItem={({ item }) =>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Chat with ${item.displayName}`} onPress={() => setOther(item)} style={styles.person}>
+            <View style={styles.avatar}><Text style={styles.avatarText}>{item.displayName.charAt(0).toUpperCase()}</Text></View>
+            <View style={styles.personText}><Text style={styles.personName}>{item.displayName}</Text><Text style={styles.muted}>{item.city}</Text></View>
+            <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+          </Pressable>} />}
+  </View>;
+}
+
+function Conversation({ apiUrl, userId, other, getToken, onBack, onSessionExpired }: Props & { other: Profile; onBack: () => void }) {
+  const queryClient = useQueryClient();
+  const [draft, setDraft] = useState('');
+  const retry = useRef<{ body: string; id: string } | null>(null);
+  const history = useInfiniteQuery({
+    queryKey: ['messages', userId, other.id],
+    initialPageParam: '',
+    queryFn: ({ pageParam }) => fetchMessages(apiUrl, getToken, other.id, pageParam),
+    getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
+    retry: (failures, error) => !(error instanceof SessionExpiredError) && failures < 1,
+  });
+  const send = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: string }) => sendMessage(apiUrl, getToken, other.id, id, body),
+    onSuccess: (_message, sent) => {
+      retry.current = null;
+      setDraft((current) => current.trim() === sent.body ? '' : current);
+      void queryClient.invalidateQueries({ queryKey: ['messages', userId, other.id] });
+    },
+  });
+  useEffect(() => {
+    if (history.error instanceof SessionExpiredError || send.error instanceof SessionExpiredError) onSessionExpired();
+  }, [history.error, send.error, onSessionExpired]);
+  const sendDraft = () => {
+    const body = draft.trim();
+    if (!body || [...body].length > 2000 || send.isPending) return;
+    const attempt = retry.current?.body === body ? retry.current : { body, id: Crypto.randomUUID() };
+    retry.current = attempt;
+    send.mutate(attempt);
+  };
+  const seen = new Set<string>();
+  const messages = (history.data?.pages.flatMap((page) => page.messages) ?? []).filter((message) => {
+    if (seen.has(message.id)) return false;
+    seen.add(message.id);
+    return true;
+  });
+  return <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.page}>
+    <View style={styles.conversationHeader}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Back to conversations" onPress={onBack} style={styles.back}><Ionicons name="arrow-back" size={21} color={colors.ink} /></Pressable>
+      <View style={styles.avatarSmall}><Text style={styles.avatarText}>{other.displayName.charAt(0).toUpperCase()}</Text></View>
+      <View><Text style={styles.personName}>{other.displayName}</Text><Text style={styles.muted}>{other.city}</Text></View>
+    </View>
+    {history.isPending ? <ActivityIndicator color={colors.blue} style={styles.loading} /> : history.error ?
+      <View style={styles.empty}><Text style={styles.muted}>{history.error.message}</Text><Pressable onPress={() => void history.refetch()}><Text style={styles.link}>Try again</Text></Pressable></View> :
+        <FlatList<DirectMessage> inverted data={messages} keyExtractor={(message) => message.id} contentContainerStyle={styles.messages} keyboardShouldPersistTaps="handled"
+          ListEmptyComponent={<View style={styles.emptyConversation}><Text style={styles.emptyTitle}>Say hello</Text><Text style={styles.muted}>Your messages will stay here when you come back.</Text></View>}
+          ListFooterComponent={history.hasNextPage ? <Pressable disabled={history.isFetchingNextPage} onPress={() => void history.fetchNextPage()} style={styles.older}><Text style={styles.link}>{history.isFetchingNextPage ? 'Loading…' : 'Load older messages'}</Text></Pressable> : null}
+          renderItem={({ item }) => <View style={[styles.bubble, item.senderId === userId ? styles.mine : styles.theirs]}>
+            <Text style={[styles.bubbleText, item.senderId === userId && styles.mineText]}>{item.body}</Text>
+            <Text style={[styles.timestamp, item.senderId === userId && styles.mineTimestamp]}>{new Date(item.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</Text>
+          </View>} />}
+    <View style={styles.composer}>
+      <TextInput accessibilityLabel="Message" placeholder="Write a message" placeholderTextColor={colors.muted} value={draft} onChangeText={(value) => { setDraft(value); send.reset(); }} multiline maxLength={2000} style={styles.input} />
+      <Pressable accessibilityRole="button" accessibilityLabel="Send message" disabled={!draft.trim() || send.isPending} onPress={sendDraft} style={[styles.send, (!draft.trim() || send.isPending) && styles.sendDisabled]}>
+        {send.isPending ? <ActivityIndicator color={colors.white} size="small" /> : <Ionicons name="arrow-up" size={20} color={colors.white} />}
+      </Pressable>
+    </View>
+    {!!send.error && <Text accessibilityRole="alert" style={styles.error}>{send.error.message} Tap send to retry.</Text>}
+  </KeyboardAvoidingView>;
+}
+
+const styles = StyleSheet.create({
+  page: { flex: 1, backgroundColor: colors.paper }, heading: { paddingHorizontal: 24, paddingTop: 32, paddingBottom: 24 }, eyebrow: { color: colors.blue, fontFamily: fonts.medium, fontSize: 10, letterSpacing: 1.5 }, title: { fontFamily: fonts.display, color: colors.ink, fontSize: 38, marginTop: 8 }, muted: { color: colors.muted, fontFamily: fonts.body, fontSize: 13 }, loading: { marginTop: 32 }, empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, padding: 32 }, emptyTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 22 }, link: { color: colors.blue, fontFamily: fonts.medium, fontSize: 13 }, list: { paddingHorizontal: 16 }, person: { minHeight: 76, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 10, borderBottomWidth: 1, borderColor: colors.line }, avatar: { width: 48, height: 48, borderRadius: 16, backgroundColor: colors.paleBlue, alignItems: 'center', justifyContent: 'center' }, avatarSmall: { width: 38, height: 38, borderRadius: 13, backgroundColor: colors.paleBlue, alignItems: 'center', justifyContent: 'center' }, avatarText: { color: colors.blue, fontFamily: fonts.display, fontSize: 20 }, personText: { flex: 1 }, personName: { color: colors.ink, fontFamily: fonts.medium, fontSize: 15 }, conversationHeader: { minHeight: 66, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: colors.line }, back: { padding: 8 }, messages: { padding: 16, flexGrow: 1 }, bubble: { maxWidth: '82%', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 15, marginVertical: 4 }, mine: { alignSelf: 'flex-end', backgroundColor: colors.blue, borderBottomRightRadius: 4 }, theirs: { alignSelf: 'flex-start', backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, borderBottomLeftRadius: 4 }, bubbleText: { color: colors.ink, fontFamily: fonts.body, fontSize: 14, lineHeight: 20 }, mineText: { color: colors.white }, timestamp: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, marginTop: 5, alignSelf: 'flex-end' }, mineTimestamp: { color: colors.paleBlue }, older: { alignItems: 'center', padding: 16 }, emptyConversation: { alignItems: 'center', padding: 30, gap: 7 }, composer: { flexDirection: 'row', alignItems: 'flex-end', gap: 10, padding: 12, borderTopWidth: 1, borderColor: colors.line, backgroundColor: colors.white }, input: { flex: 1, minHeight: 43, maxHeight: 115, borderRadius: 18, backgroundColor: colors.paper, color: colors.ink, fontFamily: fonts.body, fontSize: 14, paddingHorizontal: 14, paddingTop: 11, paddingBottom: 10 }, send: { width: 43, height: 43, borderRadius: 14, backgroundColor: colors.blue, alignItems: 'center', justifyContent: 'center' }, sendDisabled: { opacity: 0.45 }, error: { color: '#B42318', fontFamily: fonts.body, fontSize: 12, paddingHorizontal: 16, paddingBottom: 8, backgroundColor: colors.white },
+});

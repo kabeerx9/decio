@@ -20,6 +20,7 @@ type Store interface {
 	ProfileStore
 	PeopleStore
 	ConnectionStore
+	ChatStore
 	PostStore
 }
 
@@ -95,6 +96,7 @@ func NewHandler(storage Store, authenticate Middleware, realtime Realtime) http.
 	})))
 	registerPeopleRoutes(mux, storage, authenticate)
 	registerConnectionRoutes(mux, storage, realtime, authenticate)
+	registerChatRoutes(mux, storage, realtime, authenticate)
 	registerRealtimeRoutes(mux, realtime, authenticate)
 	registerPostRoutes(mux, storage, authenticate)
 	return mux

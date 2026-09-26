@@ -22,7 +22,10 @@ export default function RootLayout() {
   useEffect(() => {
     const listener = AppState.addEventListener('change', (state) => {
       focusManager.setFocused(state === 'active');
-      if (state === 'active') void queryClient.invalidateQueries({ queryKey: ['connections'] });
+      if (state === 'active') {
+        void queryClient.invalidateQueries({ queryKey: ['connections'] });
+        void queryClient.invalidateQueries({ queryKey: ['messages'] });
+      }
     });
     return () => listener.remove();
   }, []);

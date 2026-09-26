@@ -10,6 +10,7 @@ import (
 )
 
 const connectionEvent = "connections.changed"
+const messageEvent = "messages.changed"
 
 type Client struct {
 	rest *ably.REST
@@ -45,4 +46,11 @@ func (c *Client) TokenRequest(_ context.Context, userID string) (json.RawMessage
 
 func (c *Client) PublishConnectionChange(ctx context.Context, userID string) error {
 	return c.rest.Channels.Get(Channel(userID)).Publish(ctx, connectionEvent, nil)
+}
+
+func (c *Client) PublishMessageChange(ctx context.Context, userID, otherID, messageID string) error {
+	return c.rest.Channels.Get(Channel(userID)).Publish(ctx, messageEvent, struct {
+		OtherUserID string `json:"otherUserId"`
+		MessageID   string `json:"messageId"`
+	}{otherID, messageID})
 }

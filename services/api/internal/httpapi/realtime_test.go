@@ -11,10 +11,11 @@ import (
 )
 
 type fakeRealtime struct {
-	tokenUser string
-	published []string
-	tokenErr  error
-	pubErr    error
+	tokenUser        string
+	published        []string
+	messagePublished []string
+	tokenErr         error
+	pubErr           error
 }
 
 func (f *fakeRealtime) TokenRequest(_ context.Context, userID string) (json.RawMessage, error) {
@@ -24,6 +25,11 @@ func (f *fakeRealtime) TokenRequest(_ context.Context, userID string) (json.RawM
 
 func (f *fakeRealtime) PublishConnectionChange(_ context.Context, userID string) error {
 	f.published = append(f.published, userID)
+	return f.pubErr
+}
+
+func (f *fakeRealtime) PublishMessageChange(_ context.Context, userID, otherID, messageID string) error {
+	f.messagePublished = append(f.messagePublished, userID+"/"+otherID+"/"+messageID)
 	return f.pubErr
 }
 

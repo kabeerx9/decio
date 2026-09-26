@@ -10,6 +10,7 @@ import (
 type Realtime interface {
 	TokenRequest(ctx context.Context, userID string) (json.RawMessage, error)
 	PublishConnectionChange(ctx context.Context, userID string) error
+	PublishMessageChange(ctx context.Context, userID, otherID, messageID string) error
 }
 
 func registerRealtimeRoutes(mux *http.ServeMux, realtime Realtime, authenticate Middleware) {
