@@ -35,6 +35,11 @@ type ProfileStore interface {
 	PublicProfile(ctx context.Context, id string) (Profile, error)
 }
 
+type Store interface {
+	ProfileStore
+	ConnectionStore
+}
+
 type Middleware func(http.Handler) http.Handler
 
 type userIDKey struct{}
@@ -48,7 +53,7 @@ func userID(ctx context.Context) (string, bool) {
 	return id, ok && id != ""
 }
 
-func NewHandler(profiles ProfileStore, authenticate Middleware) http.Handler {
+func NewHandler(profiles Store, authenticate Middleware) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -106,6 +111,7 @@ func NewHandler(profiles ProfileStore, authenticate Middleware) http.Handler {
 		}
 	})))
 	registerPeopleRoutes(mux, profiles, authenticate)
+	registerConnectionRoutes(mux, profiles, authenticate)
 	return mux
 }
 

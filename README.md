@@ -1,6 +1,6 @@
 # Decio Update
 
-A people-first city network rebuilt with Expo, Go, Clerk, Postgres, and later Ably. The first milestone is intentionally small: sign-in, profile, people search, connections, city posts, and direct chat. The current code implements the first sign-in/profile slice.
+A people-first city network rebuilt with Expo, Go, Clerk, Postgres, and later Ably. The first milestone is intentionally small: sign-in, profile, people search, connections, city posts, and direct chat. The current code implements sign-in, profile editing, people search, and connection requests.
 
 ## Project map
 
@@ -40,6 +40,8 @@ A people-first city network rebuilt with Expo, Go, Clerk, Postgres, and later Ab
 The API creates or extends the `profiles` table on startup. `GET /health` is public. `GET /v1/me` requires `Authorization: Bearer <Clerk session token>` and returns `{ "id", "displayName", "city", "bio", "headline", "interests" }`. `PUT /v1/me` replaces those five editable fields; it requires a display name and city. The ID comes from verified Clerk claims, never from a client-supplied profile ID. The current schema update adds `bio`, `headline`, and `interests` columns to the Supabase project; these columns remain after a code revert.
 
 `GET /v1/people?q=<text>&cursor=<id>` requires the same token. It searches completed profiles by name, city, or headline, excludes the caller, and returns `{ "people": [...], "nextCursor": "" }` in pages of at most 20. An empty `q` lists completed profiles. Pass a nonempty `nextCursor` to fetch the next page. `GET /v1/people/{id}` returns one completed public profile or 404. Search uses stable ID order rather than relevance ranking for now.
+
+`GET /v1/connections` returns `{ "connections": [{ "other": <public profile>, "status": "incoming|sent|accepted" }] }` for the signed-in user. `POST /v1/connections` with `{ "userId": "<recipient Clerk ID>" }` creates a pending request; the sender needs a completed profile. `POST /v1/connections/{requesterId}/accept` accepts only a pending request addressed to the signed-in user. A unique unordered user pair prevents duplicate and reverse-direction requests, including simultaneous writes. The new `connections` table is created by the API at startup and remains in the database after a code revert. There is no notification or realtime delivery in this slice; recipients can refresh the Connections section to see new requests.
 
 `CORS_ALLOWED_ORIGINS` is a comma-separated list of exact browser origins. The example permits Expo web at `http://localhost:8081`; native iOS and Android requests do not use CORS.
 

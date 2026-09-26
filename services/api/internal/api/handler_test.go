@@ -10,14 +10,17 @@ import (
 )
 
 type fakeProfiles struct {
-	requestedID  string
-	profile      Profile
-	err          error
-	updated      ProfileInput
-	searchQuery  string
-	searchCursor string
-	searchResult PeoplePage
-	publicID     string
+	requestedID         string
+	profile             Profile
+	err                 error
+	updated             ProfileInput
+	searchQuery         string
+	searchCursor        string
+	searchResult        PeoplePage
+	publicID            string
+	connectionRequester string
+	connectionRecipient string
+	connectionResult    []Connection
 }
 
 func (f *fakeProfiles) FindOrCreate(_ context.Context, id string) (Profile, error) {
@@ -39,6 +42,21 @@ func (f *fakeProfiles) SearchPeople(_ context.Context, viewerID, query, cursor s
 func (f *fakeProfiles) PublicProfile(_ context.Context, id string) (Profile, error) {
 	f.publicID = id
 	return f.profile, f.err
+}
+
+func (f *fakeProfiles) RequestConnection(_ context.Context, requesterID, recipientID string) error {
+	f.connectionRequester, f.connectionRecipient = requesterID, recipientID
+	return f.err
+}
+
+func (f *fakeProfiles) AcceptConnection(_ context.Context, recipientID, requesterID string) error {
+	f.connectionRequester, f.connectionRecipient = requesterID, recipientID
+	return f.err
+}
+
+func (f *fakeProfiles) ListConnections(_ context.Context, id string) ([]Connection, error) {
+	f.requestedID = id
+	return f.connectionResult, f.err
 }
 
 func testAuth(next http.Handler) http.Handler {
