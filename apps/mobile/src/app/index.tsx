@@ -7,6 +7,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { fetchMyProfile, Profile, ProfileInput, saveMyProfile, SessionExpiredError } from '@/lib/profile-api';
+import { useConnectionEvents } from '@/lib/use-connection-events';
 import { AuthScreen } from '@/screens/auth';
 import { ProfileEditor } from '@/screens/profile-editor';
 import { PeopleDiscover } from '@/screens/people-discover';
@@ -21,6 +22,7 @@ export default function HomeScreen() {
   const { isLoaded, isSignedIn, userId, getToken, signOut } = useAuth();
   const { user } = useUser();
   const queryClient = useQueryClient();
+  useConnectionEvents(isLoaded && isSignedIn ? apiUrl : undefined, userId, getToken);
   const [showAuth, setShowAuth] = useState(false);
   const [tab, setTab] = useState<Tab>('discover');
   const [editing, setEditing] = useState(false);

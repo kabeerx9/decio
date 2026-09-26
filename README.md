@@ -1,6 +1,6 @@
 # Decio Update
 
-A people-first city network rebuilt with Expo, Go, Clerk, Postgres, and later Ably. The first milestone is intentionally small: sign-in, profile, people search, connections, city posts, and direct chat. The current code implements sign-in, profile editing, people search, connection requests, and city posts.
+A people-first city network rebuilt with Expo, Go, Clerk, Postgres, and Ably. The first milestone is intentionally small: sign-in, profile, people search, connections, city posts, and direct chat. The current code implements sign-in, profile editing, people search, connection requests, city posts, and realtime connection updates.
 
 ## Project map
 
@@ -13,11 +13,12 @@ A people-first city network rebuilt with Expo, Go, Clerk, Postgres, and later Ab
 
 - [Clerk development application](https://dashboard.clerk.com/apps/app_3JrbR8HF0FBC2IL8W7EPX7i0FzL/instances/ins_3JrbRAckWSiUGOwuHN79QciT86K): Native API is enabled. Sign-up and sign-in use email verification codes; passwords are disabled.
 - [Supabase project](https://supabase.com/dashboard/project/qxvcqbwnxdgnjowgfcdn): free Postgres in Mumbai. The Data API is disabled; only the Go server should connect to Postgres.
+- [Ably development application](https://ably.com/accounts/YCYj8g/apps/hzb_jA): delivers per-user connection change events. The API key stays on the Go server; mobile clients receive short-lived, subscribe-only tokens.
 
 ## Local setup
 
 1. Copy `apps/mobile/.env.example` to `apps/mobile/.env.local`. Put the Clerk **publishable** key in it. Set `EXPO_PUBLIC_API_URL` to `http://localhost:8080` for the iOS simulator, `http://10.0.2.2:8080` for the Android emulator, or your computer's LAN address for a physical phone.
-2. Copy `services/api/.env.example` to `services/api/.env.local`. Put the Clerk **secret** key in `CLERK_SECRET_KEY`. Never put this key in Expo or commit the file.
+2. Copy `services/api/.env.example` to `services/api/.env.local`. Put the Clerk **secret** key in `CLERK_SECRET_KEY` and a server-side Ably key in `ABLY_API_KEY`. Never put either key in Expo or commit the file. The Go API signs one-hour Ably token requests limited to `subscribe` on `user:<Clerk user ID>:events` via `GET /v1/realtime/token`.
 3. For Supabase, open **Connect → Direct → Session pooler** and copy the URI into `DATABASE_URL`. Replace `[YOUR-PASSWORD]` locally with the database password and append `?sslmode=require`. Percent-encode special characters in the password. The session pooler works from IPv4 networks. For an isolated local database instead, run `docker compose up -d postgres` and use the fallback URL in the example file.
 4. Start the API:
 

@@ -14,7 +14,7 @@ import (
 )
 
 func TestPostRoutesRequireSession(t *testing.T) {
-	server := NewHandler(&fakeProfiles{}, testAuth)
+	server := NewHandler(&fakeProfiles{}, testAuth, nil)
 	for _, endpoint := range []struct{ method, path string }{
 		{http.MethodPost, "/v1/posts"},
 		{http.MethodGet, "/v1/posts"},
@@ -63,7 +63,7 @@ func TestCreatePostUsesVerifiedAuthorAndNormalizesPhoto(t *testing.T) {
 	}
 	store := &fakeProfiles{postResult: domain.Post{ID: "1"}}
 	response := httptest.NewRecorder()
-	NewHandler(store, testAuth).ServeHTTP(response, postRequest(t, "  City hello  ", raw.Bytes()))
+	NewHandler(store, testAuth, nil).ServeHTTP(response, postRequest(t, "  City hello  ", raw.Bytes()))
 	if response.Code != http.StatusCreated || store.requestedID != "user_from_verified_token" || store.postBody != "City hello" || store.postKind != "image/jpeg" || len(store.postPhoto) == 0 {
 		t.Fatalf("status=%d author=%q body=%q photoType=%q photoBytes=%d", response.Code, store.requestedID, store.postBody, store.postKind, len(store.postPhoto))
 	}
@@ -73,20 +73,20 @@ func TestCreatePostRejectsInvalidInputAndIncompleteProfile(t *testing.T) {
 	for _, body := range []string{"  ", strings.Repeat("a", 1001)} {
 		store := &fakeProfiles{}
 		response := httptest.NewRecorder()
-		NewHandler(store, testAuth).ServeHTTP(response, postRequest(t, body, nil))
+		NewHandler(store, testAuth, nil).ServeHTTP(response, postRequest(t, body, nil))
 		if response.Code != http.StatusBadRequest || store.requestedID != "" {
 			t.Fatalf("invalid body status=%d storage=%q", response.Code, store.requestedID)
 		}
 	}
 	store := &fakeProfiles{}
 	response := httptest.NewRecorder()
-	NewHandler(store, testAuth).ServeHTTP(response, postRequest(t, "hello", []byte("not an image")))
+	NewHandler(store, testAuth, nil).ServeHTTP(response, postRequest(t, "hello", []byte("not an image")))
 	if response.Code != http.StatusBadRequest || store.requestedID != "" {
 		t.Fatalf("invalid photo status=%d storage=%q", response.Code, store.requestedID)
 	}
 	store = &fakeProfiles{err: domain.ErrProfileIncomplete}
 	response = httptest.NewRecorder()
-	NewHandler(store, testAuth).ServeHTTP(response, postRequest(t, "hello", nil))
+	NewHandler(store, testAuth, nil).ServeHTTP(response, postRequest(t, "hello", nil))
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("incomplete profile status=%d", response.Code)
 	}
@@ -97,7 +97,7 @@ func TestPostReadUsesVerifiedViewerAndValidatesCursor(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/v1/posts?cursor=21", nil)
 	request.Header.Set("Authorization", "Bearer good-session")
 	response := httptest.NewRecorder()
-	NewHandler(store, testAuth).ServeHTTP(response, request)
+	NewHandler(store, testAuth, nil).ServeHTTP(response, request)
 	if response.Code != http.StatusOK || store.requestedID != "user_from_verified_token" || store.postCursor != "21" || !strings.Contains(response.Body.String(), `"city":"Mumbai"`) {
 		t.Fatalf("status=%d viewer=%q cursor=%q body=%s", response.Code, store.requestedID, store.postCursor, response.Body.String())
 	}
@@ -105,7 +105,7 @@ func TestPostReadUsesVerifiedViewerAndValidatesCursor(t *testing.T) {
 	request = httptest.NewRequest(http.MethodGet, "/v1/posts?cursor=bad", nil)
 	request.Header.Set("Authorization", "Bearer good-session")
 	response = httptest.NewRecorder()
-	NewHandler(store, testAuth).ServeHTTP(response, request)
+	NewHandler(store, testAuth, nil).ServeHTTP(response, request)
 	if response.Code != http.StatusBadRequest || store.requestedID != "" {
 		t.Fatalf("invalid cursor status=%d viewer=%q", response.Code, store.requestedID)
 	}
@@ -116,13 +116,13 @@ func TestPhotoReadUsesVerifiedViewer(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/v1/posts/23/photo", nil)
 	request.Header.Set("Authorization", "Bearer good-session")
 	response := httptest.NewRecorder()
-	NewHandler(store, testAuth).ServeHTTP(response, request)
+	NewHandler(store, testAuth, nil).ServeHTTP(response, request)
 	if response.Code != http.StatusOK || store.requestedID != "user_from_verified_token" || store.publicID != "23" || response.Header().Get("Cache-Control") != "no-store" || response.Body.String() != "image" {
 		t.Fatalf("status=%d viewer=%q post=%q", response.Code, store.requestedID, store.publicID)
 	}
 	store.err = domain.ErrPostNotFound
 	response = httptest.NewRecorder()
-	NewHandler(store, testAuth).ServeHTTP(response, request)
+	NewHandler(store, testAuth, nil).ServeHTTP(response, request)
 	if response.Code != http.StatusNotFound {
 		t.Fatalf("missing photo status=%d", response.Code)
 	}

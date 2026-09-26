@@ -9,7 +9,7 @@ import (
 )
 
 func TestConnectionRoutesRequireSessionAndRejectSelfRequest(t *testing.T) {
-	server := NewHandler(&fakeProfiles{}, testAuth)
+	server := NewHandler(&fakeProfiles{}, testAuth, nil)
 	for _, endpoint := range []struct{ method, path string }{{http.MethodPost, "/v1/connections"}, {http.MethodPost, "/v1/connections/user_2/accept"}, {http.MethodGet, "/v1/connections"}} {
 		request := httptest.NewRequest(endpoint.method, endpoint.path, strings.NewReader(`{"userId":"user_2"}`))
 		response := httptest.NewRecorder()
@@ -38,7 +38,7 @@ func TestConnectionRoutesRequireSessionAndRejectSelfRequest(t *testing.T) {
 
 func TestConnectionRoutesUseVerifiedIdentityAndMapStateErrors(t *testing.T) {
 	profiles := &fakeProfiles{}
-	server := NewHandler(profiles, testAuth)
+	server := NewHandler(profiles, testAuth, nil)
 	request := func(method, path, body string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(method, path, strings.NewReader(body))
 		r.Header.Set("Authorization", "Bearer good-session")

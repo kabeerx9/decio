@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/kabeerx9/decio-update/services/api/internal/domain"
+	"github.com/kabeerx9/decio-update/services/api/internal/service"
 )
 
 type ConnectionStore interface {
@@ -18,7 +19,8 @@ type ConnectionStore interface {
 	ListConnections(ctx context.Context, userID string) ([]domain.Connection, error)
 }
 
-func registerConnectionRoutes(mux *http.ServeMux, store ConnectionStore, authenticate Middleware) {
+func registerConnectionRoutes(mux *http.ServeMux, store ConnectionStore, realtime Realtime, authenticate Middleware) {
+	connections := service.NewConnections(store, realtime)
 	mux.Handle("GET /v1/connections", authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		id, ok := userID(r.Context())
@@ -64,7 +66,7 @@ func registerConnectionRoutes(mux *http.ServeMux, store ConnectionStore, authent
 			http.Error(w, "invalid recipient", http.StatusBadRequest)
 			return
 		}
-		err := store.RequestConnection(r.Context(), id, input.UserID)
+		err := connections.Request(r.Context(), id, input.UserID)
 		switch {
 		case errors.Is(err, domain.ErrProfileIncomplete):
 			http.Error(w, "complete your profile first", http.StatusBadRequest)
@@ -91,7 +93,7 @@ func registerConnectionRoutes(mux *http.ServeMux, store ConnectionStore, authent
 			http.Error(w, "invalid requester", http.StatusBadRequest)
 			return
 		}
-		err := store.AcceptConnection(r.Context(), id, requesterID)
+		err := connections.Accept(r.Context(), id, requesterID)
 		switch {
 		case errors.Is(err, domain.ErrConnectionNotFound):
 			http.Error(w, "pending request not found", http.StatusNotFound)

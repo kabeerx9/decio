@@ -36,7 +36,7 @@ func userID(ctx context.Context) (string, bool) {
 	return id, ok && id != ""
 }
 
-func NewHandler(storage Store, authenticate Middleware) http.Handler {
+func NewHandler(storage Store, authenticate Middleware, realtime Realtime) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -94,7 +94,8 @@ func NewHandler(storage Store, authenticate Middleware) http.Handler {
 		}
 	})))
 	registerPeopleRoutes(mux, storage, authenticate)
-	registerConnectionRoutes(mux, storage, authenticate)
+	registerConnectionRoutes(mux, storage, realtime, authenticate)
+	registerRealtimeRoutes(mux, realtime, authenticate)
 	registerPostRoutes(mux, storage, authenticate)
 	return mux
 }
