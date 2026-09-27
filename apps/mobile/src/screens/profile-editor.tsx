@@ -1,17 +1,27 @@
 import { useUser } from '@clerk/expo';
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { CityPicker } from '@/components/city-picker';
 import { Avatar } from '@/components/avatar';
-import { normalizeProfileInput, Profile, ProfileInput, validateProfileInput } from '@/lib/profile-api';
+import { BackHeader, goBack } from '@/components/back-header';
+import { Chip } from '@/components/chip';
+import { CityPicker } from '@/components/city-picker';
+import { Field, inputStyle } from '@/components/field';
+import { Pill } from '@/components/pill';
+import { Screen } from '@/components/screen';
+import { normalizeProfileInput, ProfileInput, validateProfileInput } from '@/lib/profile-api';
 import { uploadProfilePhoto } from '@/lib/profile-photo';
-import { colors, fonts } from '@/theme';
+import { useProfileActions } from '@/lib/queries';
+import { useSession } from '@/lib/session';
+import { accent, colors, fonts } from '@/theme';
 
-export function ProfileEditor({ profile, onBack, onSave, onImageChanged }: { profile: Profile; onBack: () => void; onSave: (input: ProfileInput) => Promise<void>; onImageChanged: () => Promise<void> }) {
+const tint = accent.you;
+
+export function ProfileEditor() {
+  const { profile } = useSession();
+  const actions = useProfileActions();
   const { user } = useUser();
   const [draft, setDraft] = useState<ProfileInput>({ displayName: profile.displayName, city: profile.city, bio: profile.bio, headline: profile.headline, interests: profile.interests });
   const [interest, setInterest] = useState('');
@@ -20,6 +30,8 @@ export function ProfileEditor({ profile, onBack, onSave, onImageChanged }: { pro
   const [imageBusy, setImageBusy] = useState(false);
   const [imageError, setImageError] = useState('');
   const [needsSync, setNeedsSync] = useState(user ? (user.hasImage ? profile.imageUrl !== user.imageUrl : !!profile.imageUrl) : false);
+  const mounted = useRef(true);
+  useEffect(() => () => { mounted.current = false; }, []);
   const update = <K extends keyof ProfileInput>(key: K, value: ProfileInput[K]) => setDraft((current) => ({ ...current, [key]: value }));
 
   const addInterest = () => {
@@ -39,11 +51,11 @@ export function ProfileEditor({ profile, onBack, onSave, onImageChanged }: { pro
     if (message) { setError(message); return; }
     setSaving(true);
     setError('');
-    try { await onSave(normalized); } catch (failure) { setError(failure instanceof Error ? failure.message : 'Could not save your profile.'); } finally { setSaving(false); }
+    try { await actions.saveProfile(normalized); if (mounted.current) goBack(); } catch (failure) { setError(failure instanceof Error ? failure.message : 'Could not save your profile.'); } finally { setSaving(false); }
   };
 
   const syncImage = async () => {
-    await onImageChanged();
+    await actions.syncImage();
     setNeedsSync(false);
     setImageError('');
   };
@@ -52,11 +64,10 @@ export function ProfileEditor({ profile, onBack, onSave, onImageChanged }: { pro
     if (!user || imageBusy) return;
     setImageError('');
     try {
+      setImageBusy(true);
       if (!remove) {
-        setImageBusy(true);
         if (!await uploadProfilePhoto(user)) return;
       } else {
-        setImageBusy(true);
         await user.setProfileImage({ file: null });
         await user.reload();
       }
@@ -72,31 +83,46 @@ export function ProfileEditor({ profile, onBack, onSave, onImageChanged }: { pro
     try { await syncImage(); } catch (failure) { setImageError(failure instanceof Error ? failure.message : 'Could not sync your photo. Try again.'); } finally { setImageBusy(false); }
   };
 
-  return <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
-    <View style={styles.topbar}><Pressable accessibilityRole="button" accessibilityLabel="Cancel profile editing" disabled={imageBusy} onPress={onBack} style={styles.back}><Ionicons name="arrow-back" size={21} color={colors.ink} /></Pressable><Text style={styles.topbarTitle}>Edit profile</Text><View style={styles.topbarSpace} /></View>
+  return <Screen edges={['top', 'bottom']}>
+    <BackHeader title="edit profile" />
     <KeyboardAwareScrollView keyboardShouldPersistTaps="handled" bottomOffset={24} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      <View style={styles.heading}><Text style={styles.title}>Tell people about you.</Text><Text style={styles.intro}>A few details make it easier to start a conversation.</Text></View>
-      <View style={styles.photoSection}><Avatar name={draft.displayName || 'You'} imageUrl={user?.hasImage ? user.imageUrl : ''} size={76} radius={24} /><View style={styles.photoActions}><Text style={styles.label}>Profile photo</Text><Pressable accessibilityRole="button" disabled={imageBusy || !user} onPress={() => void changeImage(false)}><Text style={styles.photoLink}>{user?.hasImage ? 'Change photo' : 'Add photo'}</Text></Pressable>{user?.hasImage && <Pressable accessibilityRole="button" disabled={imageBusy} onPress={() => void changeImage(true)}><Text style={styles.removePhoto}>Remove photo</Text></Pressable>}</View>{imageBusy && <ActivityIndicator color={colors.accent} />}</View>
-      {needsSync && !imageBusy && <Pressable accessibilityRole="button" onPress={() => void retrySync()}><Text style={styles.photoLink}>Sync photo with Decio</Text></Pressable>}
-      {!!imageError && <Text accessibilityRole="alert" style={styles.imageError}>{imageError}</Text>}
-      <View style={styles.field}><Text style={styles.label}>Display name <Text style={styles.required}>*</Text></Text><TextInput accessibilityLabel="Display name" style={styles.input} value={draft.displayName} onChangeText={(value) => update('displayName', value)} maxLength={60} placeholder="What should people call you?" placeholderTextColor={colors.muted} autoCapitalize="words" /></View>
-      <View style={styles.field}><Text style={styles.label}>City <Text style={styles.required}>*</Text></Text><CityPicker value={draft.city} onChange={(city) => update('city', city)} /></View>
-      <View style={styles.field}><Text style={styles.label}>Headline</Text><TextInput accessibilityLabel="Work or study headline" style={styles.input} value={draft.headline} onChangeText={(value) => update('headline', value)} maxLength={80} placeholder="Designer, student, building something…" placeholderTextColor={colors.muted} /></View>
-      <View style={styles.field}><View style={styles.fieldHeader}><Text style={styles.label}>Short bio</Text><Text style={styles.counter}>{[...draft.bio].length}/280</Text></View><TextInput accessibilityLabel="Short bio" style={[styles.input, styles.bio]} value={draft.bio} onChangeText={(value) => update('bio', value)} maxLength={280} multiline textAlignVertical="top" placeholder="What brings you here?" placeholderTextColor={colors.muted} /></View>
-      <View style={styles.field}><Text style={styles.label}>Interests <Text style={styles.optional}>up to 3</Text></Text><Text style={styles.helper}>Give people a reason to say hello.</Text><View style={styles.interestEntry}><TextInput accessibilityLabel="Add an interest" style={[styles.input, styles.interestInput]} value={interest} onChangeText={setInterest} maxLength={24} placeholder="e.g. photography" placeholderTextColor={colors.muted} returnKeyType="done" onSubmitEditing={addInterest} /><Pressable accessibilityRole="button" accessibilityLabel="Add interest" onPress={addInterest} style={styles.add}><Ionicons name="add" size={22} color={colors.white} /></Pressable></View><View style={styles.chips}>{draft.interests.map((item) => <Pressable key={item} accessibilityRole="button" accessibilityLabel={`Remove ${item} interest`} onPress={() => update('interests', draft.interests.filter((value) => value !== item))} style={styles.chip}><Text style={styles.chipText}>{item}</Text><Ionicons name="close" size={14} color={colors.accent} /></Pressable>)}</View></View>
+      <View style={styles.photoRow}>
+        <Avatar name={draft.displayName || 'You'} imageUrl={user?.hasImage ? user.imageUrl : ''} size={84} ring={tint} />
+        <View style={styles.photoActions}>
+          <Pill label={user?.hasImage ? 'change photo' : 'add photo'} icon="image" busy={imageBusy} disabled={!user} onPress={() => void changeImage(false)} />
+          {user?.hasImage && !imageBusy && <Pressable accessibilityRole="button" hitSlop={8} onPress={() => void changeImage(true)}><Text style={styles.remove}>remove photo</Text></Pressable>}
+        </View>
+      </View>
+      {needsSync && !imageBusy && <Pill label="sync photo" icon="refresh" onPress={() => void retrySync()} style={styles.sync} />}
+      {!!imageError && <Text accessibilityRole="alert" style={styles.error}>{imageError}</Text>}
+      <Field label="name *"><TextInput accessibilityLabel="Display name" style={inputStyle} value={draft.displayName} onChangeText={(value) => update('displayName', value)} maxLength={60} placeholder="what should people call you?" placeholderTextColor={colors.mute} autoCapitalize="words" /></Field>
+      <Field label="city *"><CityPicker value={draft.city} onChange={(city) => update('city', city)} tint={tint} /></Field>
+      <Field label="headline"><TextInput accessibilityLabel="Work or study headline" style={inputStyle} value={draft.headline} onChangeText={(value) => update('headline', value)} maxLength={80} placeholder="designer, student, building something…" placeholderTextColor={colors.mute} /></Field>
+      <Field label="bio" hint={`${[...draft.bio].length}/280`}><TextInput accessibilityLabel="Short bio" style={[inputStyle, styles.bio]} value={draft.bio} onChangeText={(value) => update('bio', value)} maxLength={280} multiline textAlignVertical="top" placeholder="what brings you here?" placeholderTextColor={colors.mute} /></Field>
+      <Field label="interests" hint="up to 3 · emoji welcome">
+        <View style={styles.interestEntry}>
+          <TextInput accessibilityLabel="Add an interest" style={[inputStyle, styles.flex]} value={interest} onChangeText={setInterest} maxLength={24} placeholder="e.g. 🎧 techno" placeholderTextColor={colors.mute} returnKeyType="done" onSubmitEditing={addInterest} />
+          <Pressable accessibilityRole="button" accessibilityLabel="Add interest" onPress={addInterest} style={styles.add}><Ionicons name="add" size={24} color={colors.onAccent} /></Pressable>
+        </View>
+        {!!draft.interests.length && <View style={styles.chips}>{draft.interests.map((item) => <Chip key={item} label={item} onRemove={() => update('interests', draft.interests.filter((value) => value !== item))} />)}</View>}
+      </Field>
       {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-      <Pressable accessibilityRole="button" disabled={saving || imageBusy} style={[styles.save, (saving || imageBusy) && styles.disabled]} onPress={() => void save()}><Text style={styles.saveText}>{saving ? 'Saving…' : 'Save profile'}</Text><Ionicons name="arrow-forward" size={19} color={colors.white} /></Pressable>
+      <Pill size="lg" label="save" color={tint} busy={saving} disabled={imageBusy} onPress={() => void save()} style={styles.cta} />
     </KeyboardAwareScrollView>
-  </SafeAreaView>;
+  </Screen>;
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.paper }, topbar: { height: 64, paddingHorizontal: 19, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderColor: colors.line },
-  back: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.line, borderRadius: 13, backgroundColor: colors.white }, topbarTitle: { color: colors.ink, fontFamily: fonts.medium, fontSize: 16 }, topbarSpace: { width: 42 },
-  content: { paddingHorizontal: 24, paddingBottom: 35 }, heading: { paddingTop: 30, paddingBottom: 18 }, title: { color: colors.ink, fontFamily: fonts.display, fontSize: 34, lineHeight: 39, letterSpacing: -1 }, intro: { color: colors.muted, fontFamily: fonts.body, fontSize: 15, marginTop: 9, lineHeight: 22 },
-  photoSection: { flexDirection: 'row', alignItems: 'center', gap: 18, paddingVertical: 13 }, photoActions: { flex: 1, gap: 5 }, photoLink: { color: colors.accent, fontFamily: fonts.medium, fontSize: 14 }, removePhoto: { color: colors.muted, fontFamily: fonts.body, fontSize: 12 }, imageError: { color: '#B42318', fontFamily: fonts.body, fontSize: 13, marginTop: 7 },
-  field: { marginTop: 24 }, fieldHeader: { flexDirection: 'row', justifyContent: 'space-between' }, label: { color: colors.ink, fontFamily: fonts.medium, fontSize: 14, marginBottom: 11 }, required: { color: colors.accent }, optional: { color: colors.muted, fontFamily: fonts.body, fontSize: 12 }, helper: { color: colors.muted, fontFamily: fonts.body, fontSize: 13, marginTop: -4, marginBottom: 12 },
-  input: { minHeight: 56, backgroundColor: colors.white, color: colors.ink, borderWidth: 1, borderColor: colors.line, borderRadius: 14, paddingHorizontal: 16, fontFamily: fonts.body, fontSize: 15 }, bio: { height: 116, paddingTop: 15, lineHeight: 22 }, counter: { color: colors.muted, fontFamily: fonts.body, fontSize: 11 },
-  interestEntry: { flexDirection: 'row', gap: 9 }, interestInput: { flex: 1 }, add: { width: 56, height: 56, borderRadius: 14, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' }, chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 }, chip: { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: colors.lilac, borderRadius: 100, paddingHorizontal: 12, paddingVertical: 8 }, chipText: { color: colors.accent, fontFamily: fonts.medium, fontSize: 12 },
-  error: { color: '#B42318', fontFamily: fonts.body, fontSize: 13, marginTop: 24 }, save: { backgroundColor: colors.accent, borderRadius: 14, minHeight: 56, marginTop: 30, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, disabled: { opacity: 0.6 }, saveText: { color: colors.white, fontFamily: fonts.medium, fontSize: 16 },
+  content: { paddingHorizontal: 16, paddingBottom: 32 },
+  flex: { flex: 1 },
+  photoRow: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingTop: 8 },
+  photoActions: { flex: 1, alignItems: 'flex-start', gap: 10 },
+  remove: { color: colors.mute, fontFamily: fonts.medium, fontSize: 13 },
+  sync: { alignSelf: 'flex-start', marginTop: 12 },
+  bio: { height: 116, paddingTop: 14, lineHeight: 22 },
+  interestEntry: { flexDirection: 'row', gap: 8 },
+  add: { width: 54, height: 54, borderRadius: 27, backgroundColor: tint, alignItems: 'center', justifyContent: 'center' },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
+  error: { color: colors.danger, fontFamily: fonts.body, fontSize: 13, marginTop: 16 },
+  cta: { marginTop: 28, alignSelf: 'stretch' },
 });

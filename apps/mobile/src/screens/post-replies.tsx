@@ -1,64 +1,87 @@
-import { Ionicons } from '@expo/vector-icons';
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Image } from 'expo-image';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { InfiniteData, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
+import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 
-import { CityPost, createPostReply, fetchPostReplies, postPhotoURL } from '@/lib/posts-api';
-import { SessionExpiredError } from '@/lib/profile-api';
 import { Avatar } from '@/components/avatar';
-import { colors, fonts } from '@/theme';
+import { BackHeader, goBack } from '@/components/back-header';
+import { Composer } from '@/components/composer';
+import { EmptyState } from '@/components/empty-state';
+import { Pill } from '@/components/pill';
+import { PostCard } from '@/components/post-card';
+import { Screen } from '@/components/screen';
+import { timeAgo } from '@/lib/format';
+import { createPostReply, fetchPostReplies, PostPage } from '@/lib/posts-api';
+import { usePhotoToken, usePullRefresh } from '@/lib/queries';
+import { findCachedPost, retryUnlessExpired, uniqueById } from '@/lib/selectors';
+import { useSession, useSignOutOnExpiry } from '@/lib/session';
+import { accent, colors, fonts } from '@/theme';
 
-type Props = {
-  apiUrl: string; userId: string; post: CityPost; imageToken: string | null;
-  getToken: () => Promise<string | null>; onBack: () => void; onSessionExpired: () => void;
-};
+const tint = accent.city;
 
-export function PostReplies({ apiUrl, userId, post, imageToken, getToken, onBack, onSessionExpired }: Props) {
-  const [draft, setDraft] = useState('');
+export function PostReplies({ id }: { id: string }) {
+  const { apiUrl, userId, getToken, profile } = useSession();
   const queryClient = useQueryClient();
+  const [draft, setDraft] = useState('');
+  // Snapshot once: a later feed refetch can shift this post off the cached pages mid-reply.
+  const [post] = useState(() => findCachedPost(queryClient.getQueryData<InfiniteData<PostPage>>(['posts', userId, profile.city]), id));
+  const photoToken = usePhotoToken();
   const replies = useInfiniteQuery({
-    queryKey: ['postReplies', userId, post.id], initialPageParam: '',
-    queryFn: ({ pageParam }) => fetchPostReplies(apiUrl, getToken, post.id, pageParam),
+    queryKey: ['postReplies', userId, id],
+    initialPageParam: '',
+    queryFn: ({ pageParam }) => fetchPostReplies(apiUrl, getToken, id, pageParam),
     getNextPageParam: (page) => page.nextCursor || undefined,
-    retry: (failures, failure) => !(failure instanceof SessionExpiredError) && failures < 1,
+    retry: retryUnlessExpired,
+    enabled: !!post,
   });
   const send = useMutation({
-    mutationFn: () => createPostReply(apiUrl, getToken, post.id, draft),
+    mutationFn: () => createPostReply(apiUrl, getToken, id, draft),
     onSuccess: async () => {
       setDraft('');
-      await queryClient.invalidateQueries({ queryKey: ['postReplies', userId, post.id] });
+      await queryClient.invalidateQueries({ queryKey: ['postReplies', userId, id] });
     },
   });
-  useEffect(() => {
-    if (replies.error instanceof SessionExpiredError || send.error instanceof SessionExpiredError) onSessionExpired();
-  }, [replies.error, send.error, onSessionExpired]);
-  const items = replies.data?.pages.flatMap((page) => page.replies) ?? [];
+  useSignOutOnExpiry(replies.error, send.error);
+  const pull = usePullRefresh(() => replies.refetch());
 
-  return <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.page}>
-    <View style={styles.header}><Pressable accessibilityRole="button" accessibilityLabel="Back to city feed" onPress={onBack} style={styles.back}><Ionicons name="arrow-back" size={22} color={colors.ink} /></Pressable><Text style={styles.title}>Post replies</Text></View>
-    <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      <View style={styles.post}>
-        <View style={styles.postAuthor}><Avatar name={post.authorName} imageUrl={post.authorImageUrl} size={40} radius={14} /><View><Text style={styles.author}>{post.authorName}</Text><Text style={styles.meta}>{new Date(post.createdAt).toLocaleDateString()} · {post.city}</Text></View></View>
-        <Text style={styles.body}>{post.body}</Text>
-        {post.hasPhoto && imageToken && <Image source={{ uri: postPhotoURL(apiUrl, post.id), headers: { Authorization: `Bearer ${imageToken}` } }} style={styles.photo} contentFit="cover" accessibilityLabel={`Photo by ${post.authorName}`} />}
-      </View>
-      <View style={styles.sectionHeading}><Text style={styles.sectionTitle}>Conversation</Text><Pressable accessibilityRole="button" accessibilityLabel="Refresh replies" onPress={() => void replies.refetch()}><Ionicons name="refresh" size={20} color={colors.accent} /></Pressable></View>
-      {replies.isPending ? <ActivityIndicator color={colors.accent} style={styles.loading} /> : replies.error ?
-        <View><Text accessibilityRole="alert" style={styles.error}>{replies.error.message}</Text><Pressable accessibilityRole="button" onPress={() => void replies.refetch()}><Text style={styles.link}>Try again</Text></Pressable></View> :
-        items.length === 0 ? <Text style={styles.empty}>No replies yet. Start the conversation.</Text> : items.map((reply) =>
-          <View key={reply.id} style={styles.reply}><Avatar name={reply.authorName} imageUrl={reply.authorImageUrl} size={38} radius={13} /><View style={styles.replyContent}><View style={styles.replyHeading}><Text style={styles.author}>{reply.authorName}</Text><Text style={styles.meta}>{new Date(reply.createdAt).toLocaleDateString()}</Text></View><Text style={styles.replyBody}>{reply.body}</Text></View></View>)}
-      {replies.hasNextPage && <Pressable accessibilityRole="button" disabled={replies.isFetchingNextPage} onPress={() => void replies.fetchNextPage()} style={styles.more}><Text style={styles.link}>{replies.isFetchingNextPage ? 'Loading…' : 'Load more replies'}</Text></Pressable>}
-    </ScrollView>
-    {!!send.error && <Text accessibilityRole="alert" style={styles.error}>{send.error.message}</Text>}
-    <View style={styles.composer}><TextInput accessibilityLabel="Write a reply" placeholder="Write a reply…" placeholderTextColor={colors.muted} value={draft} onChangeText={setDraft} multiline maxLength={1000} style={styles.input} /><Pressable accessibilityRole="button" accessibilityLabel="Send reply" disabled={!draft.trim() || send.isPending} onPress={() => send.mutate()} style={[styles.send, (!draft.trim() || send.isPending) && styles.disabled]}><Ionicons name="arrow-up" size={21} color={colors.white} /></Pressable></View>
-  </KeyboardAvoidingView>;
+  if (!post) return <Screen edges={['top', 'bottom']}>
+    <BackHeader title="post" />
+    <EmptyState emoji="🫥" title="post not available" body="it may have dropped out of your feed. go back and refresh." action={<Pill label="back" onPress={goBack} />} />
+  </Screen>;
+
+  const items = uniqueById(replies.data?.pages.flatMap((page) => page.replies) ?? []);
+  return <Screen edges={['top', 'bottom']}>
+    <KeyboardAvoidingView behavior="padding" style={styles.flex}>
+      <BackHeader title="replies" />
+      <FlatList data={items} keyExtractor={(reply) => reply.id} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.list}
+        ListHeaderComponent={<PostCard post={post} photoToken={photoToken} accentColor={tint} />}
+        refreshControl={<RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} colors={[colors.onAccent]} progressBackgroundColor={tint} />}
+        onEndReached={() => { if (replies.hasNextPage && !replies.isFetchingNextPage) void replies.fetchNextPage(); }}
+        ListEmptyComponent={replies.isPending ? <ActivityIndicator color={tint} style={styles.loading} /> : replies.error ?
+          <EmptyState emoji="⚠️" title="couldn't load" body={replies.error.message} action={<Pill label="try again" onPress={() => void replies.refetch()} />} /> :
+          <Text style={styles.empty}>no replies yet. say something 👋</Text>}
+        renderItem={({ item }) => <View style={styles.reply}>
+          <Avatar name={item.authorName} imageUrl={item.authorImageUrl} size={34} />
+          <View style={styles.flex}>
+            <View style={styles.replyHead}><Text style={styles.author} numberOfLines={1}>{item.authorName}</Text><Text style={styles.time}>{timeAgo(item.createdAt)}</Text></View>
+            <Text style={styles.body}>{item.body}</Text>
+          </View>
+        </View>} />
+      {!!send.error && <Text accessibilityRole="alert" style={styles.error}>{send.error.message}</Text>}
+      <Composer value={draft} onChangeText={setDraft} onSend={() => send.mutate()} sending={send.isPending} placeholder="reply…" accentColor={tint} maxLength={1000} label="Reply" />
+    </KeyboardAvoidingView>
+  </Screen>;
 }
 
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: colors.paper }, header: { minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: colors.line }, back: { padding: 8 }, title: { color: colors.ink, fontFamily: fonts.display, fontSize: 22 },
-  content: { paddingHorizontal: 22, paddingTop: 22, paddingBottom: 35 }, post: { backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, borderRadius: 18, padding: 18 }, postAuthor: { flexDirection: 'row', alignItems: 'center', gap: 10 }, author: { color: colors.ink, fontFamily: fonts.medium, fontSize: 14 }, meta: { color: colors.muted, fontFamily: fonts.body, fontSize: 11 }, body: { color: colors.ink, fontFamily: fonts.body, fontSize: 16, lineHeight: 24, marginTop: 15 }, photo: { height: 220, borderRadius: 12, marginTop: 14 },
-  sectionHeading: { marginTop: 29, marginBottom: 11, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, sectionTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 22 }, loading: { marginTop: 20 }, empty: { color: colors.muted, fontFamily: fonts.body, fontSize: 14, marginTop: 12 },
-  reply: { flexDirection: 'row', gap: 11, paddingVertical: 15, borderBottomWidth: 1, borderColor: colors.line }, avatar: { width: 38, height: 38, borderRadius: 13, backgroundColor: colors.lilac, alignItems: 'center', justifyContent: 'center' }, avatarText: { color: colors.ink, fontFamily: fonts.medium, fontSize: 16 }, replyContent: { flex: 1 }, replyHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }, replyBody: { color: colors.ink, fontFamily: fonts.body, fontSize: 14, lineHeight: 21, marginTop: 5 },
-  more: { alignItems: 'center', padding: 17 }, link: { color: colors.accent, fontFamily: fonts.medium, fontSize: 13 }, error: { color: '#B42318', fontFamily: fonts.body, fontSize: 13, paddingHorizontal: 22, paddingVertical: 8 }, composer: { flexDirection: 'row', alignItems: 'flex-end', gap: 10, padding: 12, borderTopWidth: 1, borderColor: colors.line, backgroundColor: colors.white }, input: { flex: 1, minHeight: 43, maxHeight: 110, borderRadius: 17, backgroundColor: colors.paper, color: colors.ink, fontFamily: fonts.body, fontSize: 14, paddingHorizontal: 14, paddingTop: 11, paddingBottom: 10 }, send: { width: 43, height: 43, borderRadius: 14, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' }, disabled: { opacity: 0.45 },
+  flex: { flex: 1, minWidth: 0 },
+  list: { paddingBottom: 12 },
+  loading: { marginTop: 24 },
+  empty: { color: colors.mute, fontFamily: fonts.body, fontSize: 14, paddingHorizontal: 16, paddingTop: 8 },
+  reply: { flexDirection: 'row', gap: 10, paddingHorizontal: 16, paddingVertical: 10 },
+  replyHead: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
+  author: { color: colors.ink, fontFamily: fonts.bold, fontSize: 14, flexShrink: 1 },
+  time: { color: colors.mute, fontFamily: fonts.body, fontSize: 12 },
+  body: { color: colors.ink, fontFamily: fonts.body, fontSize: 15, lineHeight: 21, marginTop: 2 },
+  error: { color: colors.danger, fontFamily: fonts.body, fontSize: 13, paddingHorizontal: 16, paddingBottom: 4 },
 });

@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "decio-update",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
     "ios": {
       "icon": "./assets/images/icon.png",
       "bundleIdentifier": "com.kabeerx9.decioupdate"
@@ -30,7 +30,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#30263D",
+          "backgroundColor": "#0D0D0E",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }

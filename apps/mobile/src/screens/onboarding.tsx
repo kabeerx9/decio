@@ -1,55 +1,95 @@
 import { useUser } from '@clerk/expo';
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import LottieView from 'lottie-react-native';
+import { useEffect, useState } from 'react';
+import { BackHandler, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import Animated, { FadeInDown, FadeInRight, FadeOutLeft, FadeOutUp, LayoutAnimationConfig, ZoomIn } from 'react-native-reanimated';
 
-import { Avatar } from '@/components/avatar';
 import { CityPicker } from '@/components/city-picker';
-import { Profile, ProfileInput, validateProfileInput } from '@/lib/profile-api';
+import { inputStyle } from '@/components/field';
+import { PersonCard } from '@/components/person-card';
+import { Pill } from '@/components/pill';
+import { Screen } from '@/components/screen';
+import { Title } from '@/components/title';
+import { success, tick } from '@/lib/haptics';
+import { ProfileInput, validateProfileInput } from '@/lib/profile-api';
 import { uploadProfilePhoto } from '@/lib/profile-photo';
-import { colors, fonts } from '@/theme';
+import { useProfileActions } from '@/lib/queries';
+import { useSession } from '@/lib/session';
+import { accent, colors, fonts, radius } from '@/theme';
 
-type Props = {
-  profile: Profile;
-  onSave: (input: ProfileInput) => Promise<void>;
-  onSyncImage: () => Promise<void>;
-  onComplete: () => Promise<void>;
-  onSignOut: () => void;
-};
+const tint = accent.people;
+type Step = 'hello' | 'name' | 'city' | 'vibe' | 'line' | 'photo';
+const steps: Step[] = ['hello', 'name', 'city', 'vibe', 'line', 'photo'];
+const hooks = ['coffee', 'sunday football', 'gigs', 'late-night food', 'climbing', 'flea markets', 'long runs'];
+const popularCities = ['Bengaluru', 'Mumbai', 'Delhi', 'Pune', 'Hyderabad', 'Chennai', 'Kolkata', 'Ahmedabad'];
+const vibes = ['☕ coffee', '⚽ football', '🎧 gigs', '🎨 art', '🏃 running', '🎮 gaming', '📚 books', '🍜 food', '🧗 climbing', '🎬 films', '🐶 dogs', '💻 tech', '📸 photos', '🧘 yoga', '🍻 nights out'];
 
-type Step = 'welcome' | 'details' | 'photo';
-
-export function Onboarding({ profile, onSave, onSyncImage, onComplete, onSignOut }: Props) {
+export function Onboarding() {
+  const { profile, signOutLocal } = useSession();
+  const actions = useProfileActions();
   const { user } = useUser();
-  const [step, setStep] = useState<Step>(profile.displayName && profile.city ? 'photo' : 'welcome');
+  const [step, setStep] = useState<Step>(profile.displayName && profile.city ? 'photo' : 'hello');
   const [name, setName] = useState(profile.displayName);
   const [city, setCity] = useState(profile.city);
+  const [interests, setInterests] = useState<string[]>(profile.interests);
   const [headline, setHeadline] = useState(profile.headline);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [needsSync, setNeedsSync] = useState(user ? user.hasImage && !profile.imageUrl : false);
 
+  const index = steps.indexOf(step);
+  const go = (next: Step) => { setError(''); setStep(next); };
+  const back = () => { if (index > 0) go(steps[index - 1]); };
+
+  // Android back walks the steps instead of leaving the app mid-onboarding.
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (index === 0) return false;
+      go(steps[index - 1]);
+      return true;
+    });
+    return () => subscription.remove();
+  }, [index]);
+
+  const input = (): ProfileInput => ({ displayName: name.trim(), city: city.trim(), headline: headline.trim(), bio: profile.bio, interests });
+
+  const submitName = () => {
+    // Same name rule as validateProfileInput; the input's maxLength already caps it at 60.
+    if ([...name.trim()].length < 2) { setError('Use at least 2 characters.'); return; }
+    go('city');
+  };
+
+  const chooseCity = (value: string) => {
+    tick();
+    setCity(value);
+    setTimeout(() => go('vibe'), 220);
+  };
+
+  const toggleVibe = (vibe: string) => {
+    tick();
+    setInterests((current) => current.includes(vibe) ? current.filter((item) => item !== vibe) : current.length >= 3 ? current : [...current, vibe]);
+  };
+
   const saveDetails = async () => {
-    const input: ProfileInput = { displayName: name.trim(), city: city.trim(), headline: headline.trim(), bio: profile.bio, interests: profile.interests };
-    const problem = validateProfileInput(input);
+    const details = input();
+    const problem = validateProfileInput(details);
     if (problem) { setError(problem); return; }
     setBusy(true); setError('');
-    try { await onSave(input); setStep('photo'); }
+    try { await actions.saveProfile(details); go('photo'); }
     catch (failure) { setError(failure instanceof Error ? failure.message : 'Could not save your details.'); }
     finally { setBusy(false); }
   };
 
   const addPhoto = async () => {
-    if (!user) return;
+    if (!user || busy) return;
     setBusy(true); setError('');
     try {
       if (!await uploadProfilePhoto(user)) return;
       setNeedsSync(true);
-      await onSyncImage();
+      await actions.syncImage();
       setNeedsSync(false);
+      success();
     } catch (failure) { setError(failure instanceof Error ? failure.message : 'Could not add your photo.'); }
     finally { setBusy(false); }
   };
@@ -58,46 +98,153 @@ export function Onboarding({ profile, onSave, onSyncImage, onComplete, onSignOut
     setBusy(true); setError('');
     try {
       if (needsSync || (user?.hasImage && !profile.imageUrl)) {
-        await onSyncImage();
+        await actions.syncImage();
         setNeedsSync(false);
       }
-      await onComplete();
+      success();
+      await actions.finishOnboarding();
     } catch (failure) { setError(failure instanceof Error ? failure.message : 'Could not finish onboarding.'); }
     finally { setBusy(false); }
   };
 
-  return <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
-    <View style={styles.top}><Text style={styles.brand}>decio<Text style={styles.brandDot}>.</Text></Text><Pressable accessibilityRole="button" onPress={onSignOut}><Text style={styles.signOut}>Sign out</Text></Pressable></View>
-    <View style={styles.progress}><View style={styles.progressTrack}><View style={[styles.progressFill, { width: step === 'welcome' ? '33%' : step === 'details' ? '66%' : '100%' }]} /></View><Text style={styles.progressText}>{step === 'welcome' ? '01' : step === 'details' ? '02' : '03'} / 03</Text></View>
-    {step === 'welcome' ? <View style={styles.welcome}>
-      <View style={styles.art}><LottieView source={require('../../assets/animations/meet.json')} autoPlay loop style={styles.lottie} /><View style={styles.artCaption}><Ionicons name="sparkles" size={16} color={colors.accent} /><Text style={styles.artCaptionText}>Good people, nearby.</Text></View></View>
-      <View><Text style={styles.eyebrow}>YOUR CITY, YOUR PEOPLE</Text><Text style={styles.title}>Find your people around the corner.</Text><Text style={styles.copy}>Share what’s happening, meet people nearby, and turn a hello into a connection.</Text></View>
-      <Pressable accessibilityRole="button" style={styles.button} onPress={() => setStep('details')}><Text style={styles.buttonText}>Let’s get started</Text><Ionicons name="arrow-forward" size={20} color={colors.white} /></Pressable>
-    </View> : step === 'details' ? <KeyboardAwareScrollView keyboardShouldPersistTaps="handled" bottomOffset={24} contentContainerStyle={styles.form}>
-      <Text style={styles.eyebrow}>FIRST, THE BASICS</Text><Text style={styles.title}>Make yourself at home.</Text><Text style={styles.copy}>People will see your name and city. Add a little context if you like.</Text>
-      <Text style={styles.label}>Your name</Text><TextInput accessibilityLabel="Your name" value={name} onChangeText={setName} maxLength={60} autoCapitalize="words" placeholder="What should people call you?" placeholderTextColor={colors.muted} style={styles.input} />
-      <Text style={styles.label}>Your city</Text><CityPicker value={city} onChange={setCity} />
-      <Text style={styles.label}>A little about you <Text style={styles.optional}>optional</Text></Text><TextInput accessibilityLabel="A little about you" value={headline} onChangeText={setHeadline} maxLength={80} placeholder="Designer, student, building something…" placeholderTextColor={colors.muted} style={styles.input} />
-      <Text style={styles.hint}>You can always edit this later.</Text>
-      {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-      <Pressable accessibilityRole="button" disabled={busy} style={[styles.button, busy && styles.disabled]} onPress={() => void saveDetails()}><Text style={styles.buttonText}>{busy ? 'Saving…' : 'Continue'}</Text>{busy ? <ActivityIndicator color={colors.white} /> : <Ionicons name="arrow-forward" size={20} color={colors.white} />}</Pressable>
-    </KeyboardAwareScrollView> : <View style={styles.photoStep}>
-      <View><Text style={styles.eyebrow}>ONE LAST THING</Text><Text style={styles.title}>Put a face to the name.</Text><Text style={styles.copy}>A photo helps people recognize you when a chat becomes a real connection.</Text></View>
-      <View style={styles.avatarWrap}><View style={styles.avatarHalo}><Avatar name={name || profile.displayName} imageUrl={user?.hasImage ? user.imageUrl : profile.imageUrl} size={150} radius={50} /></View><Text style={styles.avatarHint}>Just you, as you are.</Text></View>
-      <View><Pressable accessibilityRole="button" disabled={busy || !user} style={styles.photoButton} onPress={() => void addPhoto()}><Ionicons name="image-outline" size={20} color={colors.accent} /><Text style={styles.photoButtonText}>{user?.hasImage ? 'Change photo' : 'Choose a photo'}</Text></Pressable>
-        {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-        <Pressable accessibilityRole="button" disabled={busy || (!user?.hasImage && !profile.imageUrl)} style={[styles.button, (busy || (!user?.hasImage && !profile.imageUrl)) && styles.disabled]} onPress={() => void finish()}><Text style={styles.buttonText}>{busy ? 'Finishing…' : 'Enter Decio'}</Text>{busy ? <ActivityIndicator color={colors.white} /> : <Ionicons name="arrow-forward" size={20} color={colors.white} />}</Pressable>
-        <Pressable accessibilityRole="button" onPress={() => setStep('details')} style={styles.back}><Text style={styles.backText}>Edit my details</Text></Pressable></View>
-    </View>}
-  </SafeAreaView>;
+  const photoUrl = user?.hasImage ? user.imageUrl : profile.imageUrl;
+  const errorText = !!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>;
+
+  return <Screen edges={['top', 'bottom']}>
+    <View style={styles.top}>
+      {index > 0
+        ? <Pressable accessibilityRole="button" accessibilityLabel="Previous step" hitSlop={8} onPress={back} style={styles.back}><Ionicons name="arrow-back" size={22} color={colors.ink} /></Pressable>
+        : <View style={styles.back} />}
+      <View style={styles.progress}>{steps.slice(1).map((item, position) => <View key={item} style={[styles.segment, position < index && { backgroundColor: tint }]} />)}</View>
+      <Pressable accessibilityRole="button" hitSlop={10} onPress={signOutLocal}><Text style={styles.signOut}>sign out</Text></Pressable>
+    </View>
+    <KeyboardAvoidingView behavior="padding" style={styles.flex}>
+      {/* The first step mounts with the screen; its entering animation froze on frame one on Android, so only step changes animate. */}
+      <LayoutAnimationConfig skipEntering>
+      <Animated.View key={step} entering={FadeInRight.duration(280)} exiting={FadeOutLeft.duration(160)} style={styles.flex}>
+        {step === 'hello' ? <View style={styles.page}>
+          <View>
+            <Text style={styles.hero}>FIND{'\n'}PEOPLE FOR</Text>
+            <RotatingWord />
+            <Text style={styles.copy}>your city, but smaller. meet people nearby and turn a hello into plans.</Text>
+          </View>
+          <Pill size="lg" label="let's go" color={tint} trailingIcon="arrow-forward" onPress={() => go('name')} style={styles.cta} />
+        </View> : step === 'name' ? <View style={styles.page}>
+          <View>
+            <Title size={52}>{'what do people\ncall you?'}</Title>
+            <TextInput autoFocus accessibilityLabel="Your name" value={name} onChangeText={setName} maxLength={60} autoCapitalize="words" autoCorrect={false}
+              placeholder="your name" placeholderTextColor={colors.mute} returnKeyType="next" onSubmitEditing={submitName} style={[styles.bigInput, { fontSize: nameSize(name) }]} />
+            {errorText}
+          </View>
+          <Pill size="lg" label="next" color={tint} trailingIcon="arrow-forward" disabled={!name.trim()} onPress={submitName} style={styles.cta} />
+        </View> : step === 'city' ? <ScrollView contentContainerStyle={styles.scrollPage} keyboardShouldPersistTaps="handled">
+          <Title size={52}>{"where's home\nright now?"}</Title>
+          <Text style={styles.copy}>your feed and the people you meet follow this.</Text>
+          <View style={styles.tiles}>{popularCities.map((option) => {
+            const selected = city === option;
+            return <Pressable key={option} accessibilityRole="button" accessibilityState={{ selected }} onPress={() => chooseCity(option)}
+              style={({ pressed }) => [styles.tile, selected && { backgroundColor: tint }, pressed && styles.pressed]}>
+              <Text style={[styles.tileText, selected && { color: colors.onAccent }]}>{option.toUpperCase()}</Text>
+            </Pressable>;
+          })}</View>
+          <Text style={styles.label}>somewhere else</Text>
+          <CityPicker value={popularCities.includes(city) ? '' : city} onChange={chooseCity} tint={tint} />
+        </ScrollView> : step === 'vibe' ? <View style={styles.page}>
+          <ScrollView contentContainerStyle={styles.vibeScroll}>
+            <Title size={52}>{'pick your\nvibe'}</Title>
+            <Text style={styles.copy}>up to 3. it's how people find you.</Text>
+            <View style={styles.vibes}>{vibes.map((vibe) => {
+              const selected = interests.includes(vibe);
+              return <Pressable key={vibe} accessibilityRole="button" accessibilityState={{ selected }} onPress={() => toggleVibe(vibe)}
+                style={({ pressed }) => [styles.vibe, selected && { backgroundColor: tint }, pressed && styles.pressed]}>
+                <Text style={[styles.vibeText, selected && { color: colors.onAccent }]}>{vibe}</Text>
+              </Pressable>;
+            })}</View>
+          </ScrollView>
+          <Pill size="lg" label={interests.length ? `next · ${interests.length}/3` : 'skip'} color={interests.length ? tint : undefined} trailingIcon="arrow-forward" onPress={() => go('line')} style={styles.cta} />
+        </View> : step === 'line' ? <View style={styles.page}>
+          <View>
+            <Title size={52}>{'one line\nabout you'}</Title>
+            <Text style={styles.copy}>optional. what are you up to?</Text>
+            <TextInput autoFocus accessibilityLabel="A line about you" value={headline} onChangeText={setHeadline} maxLength={80}
+              placeholder="designer, learning guitar, new in town" placeholderTextColor={colors.mute} style={[inputStyle, styles.lineInput]} />
+            {errorText}
+          </View>
+          <Pill size="lg" label={headline.trim() ? 'next' : 'skip'} color={tint} trailingIcon="arrow-forward" busy={busy} onPress={() => void saveDetails()} style={styles.cta} />
+        </View> : <View style={styles.page}>
+          <View>
+            <Title size={52}>{photoUrl ? "you're in" : 'show your\nface'}</Title>
+            <Text style={styles.copy}>{photoUrl ? 'this is how people see you on decio.' : 'a photo helps people recognise you irl.'}</Text>
+          </View>
+          <View style={styles.center}>
+            {photoUrl
+              ? <Animated.View entering={ZoomIn.springify().damping(14)}>
+                <PersonCard person={{ ...profile, displayName: name || profile.displayName, headline, interests, imageUrl: photoUrl }} width={220} onPress={() => void addPhoto()} />
+              </Animated.View>
+              : <Pressable accessibilityRole="button" accessibilityLabel="Choose a photo" disabled={busy || !user} onPress={() => void addPhoto()} style={({ pressed }) => [styles.photoTarget, pressed && styles.pressed]}>
+                <Ionicons name="camera" size={40} color={tint} />
+                <Text style={styles.photoHint}>{busy ? 'uploading…' : 'tap to add'}</Text>
+              </Pressable>}
+          </View>
+          <View style={styles.actions}>
+            {errorText}
+            {!!photoUrl && <Pressable accessibilityRole="button" disabled={busy} onPress={() => void addPhoto()} style={styles.link}><Text style={styles.linkText}>change photo</Text></Pressable>}
+            <Pill size="lg" label="enter decio" color={tint} trailingIcon="arrow-forward" busy={busy} disabled={!photoUrl} onPress={() => void finish()} style={styles.cta} />
+          </View>
+        </View>}
+      </Animated.View>
+      </LayoutAnimationConfig>
+    </KeyboardAvoidingView>
+  </Screen>;
+}
+
+// Shrink the display-size name as it grows so it stays on one visible line instead of scrolling sideways.
+function nameSize(value: string) {
+  return Math.max(32, Math.min(56, 56 - ([...value].length - 10) * 2.4));
+}
+
+function RotatingWord() {
+  const [position, setPosition] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setPosition((current) => (current + 1) % hooks.length), 1600);
+    return () => clearInterval(timer);
+  }, []);
+  return <View style={styles.rotator}>
+    <Animated.Text key={position} entering={FadeInDown.duration(320)} exiting={FadeOutUp.duration(220)} style={[styles.hero, { color: tint }]} numberOfLines={1} adjustsFontSizeToFit>
+      {hooks[position].toUpperCase()}.
+    </Animated.Text>
+  </View>;
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.paper }, top: { height: 62, paddingHorizontal: 25, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, brand: { fontFamily: fonts.display, fontSize: 29, color: colors.plum, letterSpacing: -1.5 }, brandDot: { color: colors.accent }, signOut: { fontFamily: fonts.medium, color: colors.muted, fontSize: 13 },
-  progress: { flexDirection: 'row', alignItems: 'center', gap: 13, paddingHorizontal: 25, paddingTop: 8 }, progressTrack: { height: 5, flex: 1, borderRadius: 4, backgroundColor: colors.line }, progressFill: { height: 5, borderRadius: 4, backgroundColor: colors.accent }, progressText: { fontFamily: fonts.medium, color: colors.muted, fontSize: 11, letterSpacing: 1 },
-  welcome: { flex: 1, justifyContent: 'space-between', paddingHorizontal: 25, paddingBottom: 25, paddingTop: 20 }, art: { height: '47%', minHeight: 230, maxHeight: 390, borderRadius: 32, backgroundColor: colors.lilac, alignItems: 'center', justifyContent: 'center' }, lottie: { width: '100%', height: '90%' }, artCaption: { position: 'absolute', bottom: 23, flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 99, backgroundColor: colors.white }, artCaptionText: { color: colors.ink, fontFamily: fonts.medium, fontSize: 12 },
-  eyebrow: { color: colors.accent, fontFamily: fonts.medium, fontSize: 11, letterSpacing: 1.6, marginBottom: 13 }, title: { color: colors.ink, fontFamily: fonts.display, fontSize: 40, lineHeight: 43, letterSpacing: -1.5 }, copy: { color: colors.muted, fontFamily: fonts.body, fontSize: 16, lineHeight: 24, marginTop: 15 },
-  button: { minHeight: 58, backgroundColor: colors.accent, borderRadius: 17, paddingHorizontal: 21, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 24 }, buttonText: { color: colors.white, fontFamily: fonts.medium, fontSize: 16 }, disabled: { opacity: 0.5 },
-  form: { paddingHorizontal: 25, paddingTop: 43, paddingBottom: 35 }, label: { color: colors.ink, fontFamily: fonts.medium, fontSize: 14, marginTop: 29, marginBottom: 11 }, optional: { color: colors.muted, fontFamily: fonts.body, fontSize: 12 }, input: { minHeight: 56, backgroundColor: colors.white, borderColor: colors.line, borderWidth: 1, borderRadius: 14, paddingHorizontal: 16, color: colors.ink, fontFamily: fonts.body, fontSize: 15 }, hint: { color: colors.muted, fontFamily: fonts.body, fontSize: 12, marginTop: 18 }, error: { color: '#B42318', fontFamily: fonts.body, fontSize: 13, marginTop: 20 },
-  photoStep: { flex: 1, justifyContent: 'space-between', paddingHorizontal: 25, paddingTop: 43, paddingBottom: 23 }, avatarWrap: { alignItems: 'center' }, avatarHalo: { width: 218, height: 218, borderRadius: 109, backgroundColor: colors.lilac, alignItems: 'center', justifyContent: 'center' }, avatarHint: { color: colors.muted, fontFamily: fonts.body, fontSize: 13, marginTop: 16 }, photoButton: { minHeight: 55, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.white, borderRadius: 15, flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center' }, photoButtonText: { color: colors.accent, fontFamily: fonts.medium, fontSize: 15 }, back: { alignItems: 'center', paddingTop: 18 }, backText: { color: colors.muted, fontFamily: fonts.medium, fontSize: 13 },
+  flex: { flex: 1 },
+  top: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 12, paddingVertical: 8 },
+  back: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  progress: { flex: 1, flexDirection: 'row', gap: 5 },
+  segment: { flex: 1, height: 5, borderRadius: radius.pill, backgroundColor: colors.surface2 },
+  signOut: { color: colors.mute, fontFamily: fonts.medium, fontSize: 13, paddingRight: 8 },
+  page: { flex: 1, justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 12 },
+  scrollPage: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 32 },
+  hero: { fontFamily: fonts.display, fontSize: 76, lineHeight: 76, color: colors.ink, includeFontPadding: false },
+  rotator: { height: 80, justifyContent: 'center', overflow: 'hidden' },
+  copy: { color: colors.mute, fontFamily: fonts.medium, fontSize: 16, lineHeight: 23, marginTop: 12 },
+  cta: { alignSelf: 'stretch' },
+  bigInput: { marginTop: 28, color: tint, fontFamily: fonts.display, paddingVertical: 4, includeFontPadding: false },
+  error: { color: colors.danger, fontFamily: fonts.body, fontSize: 13, marginTop: 12 },
+  tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 24 },
+  tile: { width: '48.5%', height: 68, borderRadius: radius.md, backgroundColor: colors.surface, justifyContent: 'flex-end', padding: 12 },
+  tileText: { fontFamily: fonts.display, fontSize: 26, lineHeight: 28, color: colors.ink },
+  pressed: { transform: [{ scale: 0.97 }] },
+  label: { color: colors.mute, fontFamily: fonts.bold, fontSize: 13, marginTop: 24, marginBottom: 8 },
+  vibeScroll: { paddingBottom: 16 },
+  vibes: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 24 },
+  vibe: { height: 46, paddingHorizontal: 16, borderRadius: radius.pill, backgroundColor: colors.surface, justifyContent: 'center' },
+  vibeText: { fontFamily: fonts.bold, fontSize: 15, color: colors.ink },
+  lineInput: { marginTop: 24, fontSize: 17 },
+  center: { alignItems: 'center' },
+  photoTarget: { width: 220, height: 220, borderRadius: 110, borderWidth: 2, borderStyle: 'dashed', borderColor: tint, alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.surface },
+  photoHint: { color: colors.ink, fontFamily: fonts.bold, fontSize: 15 },
+  actions: { gap: 6 },
+  link: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  linkText: { color: colors.mute, fontFamily: fonts.bold, fontSize: 14 },
 });
