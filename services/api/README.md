@@ -40,3 +40,9 @@ SQL files in `internal/migrations/sql/` are append-only. `000001` represents the
 Back up Supabase's `public` schema and data before a production migration. For example, with `DATABASE_URL` set, run `umask 077; pg_dump "$DATABASE_URL" --schema=public --format=custom --no-owner --no-acl --file=/private/backup/location/decio-before-migration.dump`. Keep the backup outside the repository. Run only one migrator at a time. If a run leaves a dirty version, inspect the database and the failed SQL before repairing its recorded state; do not blindly force a version.
 
 For local development, run `docker compose up -d postgres` from the repository root and `DATABASE_URL=postgres://decio:decio@localhost:5433/decio?sslmode=disable go run ./cmd/migrate up` from `services/api`. Then run `go test ./...`. Set `TEST_DATABASE_URL=postgres://decio:decio@localhost:5433/decio?sslmode=disable` to include SQL integration tests; they require the main local test database to have been migrated first. Migration tests create and drop their own temporary databases.
+
+## Deployment
+
+The Vercel `decio-api` project uses `services/api` as its root, the Go framework preset, and the Mumbai (`bom1`) function region to stay close to Supabase. Its Git connection deploys pushes to `main` to production. Production environment variables are `DATABASE_URL`, `CLERK_SECRET_KEY`, `ABLY_API_KEY`, and `CORS_ALLOWED_ORIGINS`; Vercel supplies `PORT`. Keep their values in Vercel's sensitive environment variables, never in Git.
+
+The Git deployment does not run migrations. Before pushing code that needs a new schema version, run `go run ./cmd/migrate up` against Supabase and verify the version is clean. The API's startup check makes a forgotten migration fail visibly instead of changing the database during a request or cold start.
