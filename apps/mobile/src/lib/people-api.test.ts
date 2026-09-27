@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { fetchPublicProfile, searchPeople } from './people-api';
 import { SessionExpiredError } from './profile-api';
 
-const person = { id: 'user_2', displayName: 'Asha', city: 'Mumbai', bio: 'Hello', headline: 'Designer', interests: ['Art'], imageUrl: 'https://images.clerk.test/asha.jpg' };
+const person = { id: 'user_2', displayName: 'Asha', city: 'Mumbai', bio: 'Hello', headline: 'Designer', interests: ['Art'], imageUrl: 'https://images.clerk.test/asha.jpg', onboardingComplete: false };
 
 test('searchPeople sends an authenticated, encoded query and cursor', async () => {
   let requestedURL = '';

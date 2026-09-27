@@ -15,6 +15,7 @@ type ProfileStore interface {
 	FindOrCreate(ctx context.Context, clerkUserID string) (domain.Profile, error)
 	Update(ctx context.Context, clerkUserID string, input domain.ProfileInput) (domain.Profile, error)
 	SetProfileImageURL(ctx context.Context, clerkUserID, imageURL string) (domain.Profile, error)
+	CompleteOnboarding(ctx context.Context, clerkUserID string) (domain.Profile, error)
 }
 
 type ProfileImageSource func(ctx context.Context, clerkUserID string) (string, error)
@@ -95,6 +96,25 @@ func NewHandler(storage Store, authenticate Middleware, realtime Realtime, image
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(profile); err != nil {
 			log.Printf("encode profile: %v", err)
+		}
+	})))
+	mux.Handle("POST /v1/me/onboarding/complete", authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		id, ok := userID(r.Context())
+		if !ok {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		profile, err := storage.CompleteOnboarding(r.Context(), id)
+		switch {
+		case errors.Is(err, domain.ErrProfileIncomplete):
+			http.Error(w, "add your name, city, and profile photo first", http.StatusConflict)
+		case err != nil:
+			log.Printf("complete onboarding: %v", err)
+			http.Error(w, "onboarding unavailable", http.StatusInternalServerError)
+		default:
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(profile)
 		}
 	})))
 	if len(imageSources) > 0 && imageSources[0] != nil {

@@ -10,13 +10,14 @@ var ErrProfileNotFound = errors.New("profile not found")
 var ErrProfileIncomplete = errors.New("complete your profile first")
 
 type Profile struct {
-	ID          string   `json:"id"`
-	DisplayName string   `json:"displayName"`
-	City        string   `json:"city"`
-	Bio         string   `json:"bio"`
-	Headline    string   `json:"headline"`
-	Interests   []string `json:"interests"`
-	ImageURL    string   `json:"imageUrl"`
+	ID                 string   `json:"id"`
+	DisplayName        string   `json:"displayName"`
+	City               string   `json:"city"`
+	Bio                string   `json:"bio"`
+	Headline           string   `json:"headline"`
+	Interests          []string `json:"interests"`
+	ImageURL           string   `json:"imageUrl"`
+	OnboardingComplete bool     `json:"onboardingComplete"`
 }
 
 type ProfileInput struct {

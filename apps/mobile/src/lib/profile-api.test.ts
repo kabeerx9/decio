@@ -1,9 +1,16 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { fetchMyProfile, saveMyProfile, SessionExpiredError, syncProfileImage } from './profile-api';
+import { completeOnboarding, fetchMyProfile, parseProfile, saveMyProfile, SessionExpiredError, syncProfileImage } from './profile-api';
 
-const emptyProfile = { id: 'user_1', displayName: '', city: '', bio: '', headline: '', interests: [], imageUrl: '' };
+const emptyProfile = { id: 'user_1', displayName: '', city: '', bio: '', headline: '', interests: [], imageUrl: '', onboardingComplete: false };
+
+test('a profile response without the completion flag cannot bypass onboarding', () => {
+  const { onboardingComplete: _ignored, ...legacy } = emptyProfile;
+  assert.equal(parseProfile({ ...legacy, displayName: 'Kabeer', city: 'Mumbai' }).onboardingComplete, false);
+  assert.equal(parseProfile(legacy).onboardingComplete, false);
+  assert.equal(parseProfile({ ...emptyProfile, displayName: 'Kabeer', city: 'Mumbai' }).onboardingComplete, false);
+});
 
 test('fetchMyProfile sends the current Clerk token to the Go API', async () => {
   let authorization = '';
@@ -32,7 +39,18 @@ test('saveMyProfile sends a complete edit and fetchMyProfile reloads it', async 
   const reloaded = await fetchMyProfile('http://localhost:8080', async () => 'session-token', request);
   assert.deepEqual(requests, ['PUT', 'GET']);
   assert.deepEqual(reloaded, saved);
-  assert.deepEqual(saved, { id: 'user_1', displayName: 'Kabeer', city: 'Mumbai', bio: 'Hello', headline: 'Mobile engineer', interests: ['Go'], imageUrl: '' });
+  assert.deepEqual(saved, { id: 'user_1', displayName: 'Kabeer', city: 'Mumbai', bio: 'Hello', headline: 'Mobile engineer', interests: ['Go'], imageUrl: '', onboardingComplete: false });
+});
+
+test('completeOnboarding uses the verified session and returns the server completion state', async () => {
+  const completed = await completeOnboarding('https://api.test/', async () => 'session-token', async (url, options) => {
+    assert.equal(url, 'https://api.test/v1/me/onboarding/complete');
+    assert.equal(options?.method, 'POST');
+    assert.equal(new Headers(options?.headers).get('Authorization'), 'Bearer session-token');
+    return Response.json({ ...emptyProfile, onboardingComplete: true });
+  });
+  assert.equal(completed.onboardingComplete, true);
+  await assert.rejects(completeOnboarding('https://api.test', async () => 'session-token', async () => new Response('add your name, city, and profile photo first', { status: 409 })), /profile photo/);
 });
 
 test('syncProfileImage sends no client-supplied URL and returns the server profile', async () => {

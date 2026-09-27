@@ -48,6 +48,38 @@ func (f *fakeProfiles) SetProfileImageURL(_ context.Context, id, url string) (do
 	return f.profile, f.err
 }
 
+func (f *fakeProfiles) CompleteOnboarding(_ context.Context, id string) (domain.Profile, error) {
+	f.requestedID = id
+	if f.profile.DisplayName == "" || f.profile.City == "" || f.profile.ImageURL == "" {
+		return domain.Profile{}, domain.ErrProfileIncomplete
+	}
+	f.profile.OnboardingComplete = true
+	return f.profile, f.err
+}
+
+func TestCompleteOnboardingRequiresVerifiedUserAndCompleteProfile(t *testing.T) {
+	profiles := &fakeProfiles{profile: domain.Profile{ID: "user_from_verified_token", DisplayName: "Kabeer", City: "Mumbai", Interests: []string{}}}
+	server := NewHandler(profiles, testAuth, nil)
+	request := httptest.NewRequest(http.MethodPost, "/v1/me/onboarding/complete", nil)
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, request)
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated status=%d", response.Code)
+	}
+	request.Header.Set("Authorization", "Bearer good-session")
+	response = httptest.NewRecorder()
+	server.ServeHTTP(response, request)
+	if response.Code != http.StatusConflict || profiles.profile.OnboardingComplete {
+		t.Fatalf("incomplete status=%d", response.Code)
+	}
+	profiles.profile.ImageURL = "https://images.clerk.test/avatar.jpg"
+	response = httptest.NewRecorder()
+	server.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || profiles.requestedID != "user_from_verified_token" || !profiles.profile.OnboardingComplete {
+		t.Fatalf("complete status=%d profile=%+v", response.Code, profiles.profile)
+	}
+}
+
 func TestSyncProfileImageUsesClerkForVerifiedUser(t *testing.T) {
 	profiles := &fakeProfiles{profile: domain.Profile{ID: "user_from_verified_token", Interests: []string{}}}
 	called := ""

@@ -45,6 +45,12 @@ func TestChatHistoryAuthorizationPaginationAndRetries(t *testing.T) {
 		if _, err := store.Update(ctx, id, domain.ProfileInput{DisplayName: id, City: "Mumbai", Interests: []string{}}); err != nil {
 			t.Fatal(err)
 		}
+		if _, err := store.SetProfileImageURL(ctx, id, "https://images.clerk.test/avatar.jpg"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := store.CompleteOnboarding(ctx, id); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := store.RequestConnection(ctx, a, b); err != nil {
 		t.Fatal(err)

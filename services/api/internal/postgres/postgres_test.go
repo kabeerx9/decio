@@ -54,6 +54,12 @@ func TestFindOrCreateKeepsProfilesSeparate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := profiles.CompleteOnboarding(ctx, firstID); err != domain.ErrProfileIncomplete {
+		t.Fatalf("missing photo must not complete onboarding: %v", err)
+	}
+	if _, err := profiles.PublicProfile(ctx, firstID); err != domain.ErrProfileNotFound {
+		t.Fatalf("unfinished account must not have public profile: %v", err)
+	}
 	imageURL := "https://images.clerk.test/avatar.jpg"
 	saved, err = profiles.SetProfileImageURL(ctx, firstID, imageURL)
 	if err != nil || saved.ImageURL != imageURL {
@@ -74,8 +80,19 @@ func TestFindOrCreateKeepsProfilesSeparate(t *testing.T) {
 	if !reflect.DeepEqual(saved, reloaded) || other.DisplayName != "" || other.City != "" {
 		t.Fatalf("profile edit did not persist separately: saved=%+v reloaded=%+v other=%+v", saved, reloaded, other)
 	}
+	if _, err := profiles.CompleteOnboarding(ctx, secondID); err != domain.ErrProfileIncomplete {
+		t.Fatalf("blank profile must not complete onboarding: %v", err)
+	}
+	completed, err := profiles.CompleteOnboarding(ctx, firstID)
+	if err != nil || !completed.OnboardingComplete {
+		t.Fatalf("complete onboarding: %+v %v", completed, err)
+	}
+	completedAgain, err := profiles.CompleteOnboarding(ctx, firstID)
+	if err != nil || !reflect.DeepEqual(completed, completedAgain) {
+		t.Fatalf("completion must be idempotent: %+v %v", completedAgain, err)
+	}
 	cleared, err := profiles.SetProfileImageURL(ctx, firstID, "")
-	if err != nil || cleared.ImageURL != "" {
+	if err != nil || cleared.ImageURL != "" || !cleared.OnboardingComplete {
 		t.Fatalf("clear image URL: %+v %v", cleared, err)
 	}
 }
@@ -111,6 +128,12 @@ func TestSearchPeopleMatchesPublicProfilesAndPages(t *testing.T) {
 			city, headline = "Pune", prefix+"Illustrator"
 		}
 		if _, err := profiles.Update(ctx, id, domain.ProfileInput{DisplayName: fmt.Sprintf("Person %02d %s", index, prefix), City: city, Headline: headline, Interests: []string{}}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := profiles.SetProfileImageURL(ctx, id, "https://images.clerk.test/avatar.jpg"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := profiles.CompleteOnboarding(ctx, id); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -1,5 +1,5 @@
 export type ProfileInput = { displayName: string; city: string; bio: string; headline: string; interests: string[] };
-export type Profile = ProfileInput & { id: string; imageUrl: string };
+export type Profile = ProfileInput & { id: string; imageUrl: string; onboardingComplete: boolean };
 
 export class SessionExpiredError extends Error {
   constructor() { super('Your session has ended. Please sign in again.'); }
@@ -12,10 +12,23 @@ export function parseProfile(value: unknown): Profile {
     !('bio' in value) || typeof value.bio !== 'string' ||
     !('headline' in value) || typeof value.headline !== 'string' ||
     !('interests' in value) || !Array.isArray(value.interests) || !value.interests.every((interest) => typeof interest === 'string') ||
-    ('imageUrl' in value && typeof value.imageUrl !== 'string')) {
+    ('imageUrl' in value && typeof value.imageUrl !== 'string') ||
+    ('onboardingComplete' in value && typeof value.onboardingComplete !== 'boolean')) {
     throw new Error('The profile response was unexpected. Please try again.');
   }
-  return { ...value, imageUrl: 'imageUrl' in value ? value.imageUrl : '' } as Profile;
+  return { ...value, imageUrl: 'imageUrl' in value ? value.imageUrl : '', onboardingComplete: 'onboardingComplete' in value ? value.onboardingComplete : false } as Profile;
+}
+
+export async function completeOnboarding(apiUrl: string, getToken: () => Promise<string | null>, request: typeof fetch = fetch): Promise<Profile> {
+  const token = await getToken();
+  if (!token) throw new SessionExpiredError();
+  const response = await request(`${apiUrl.replace(/\/$/, '')}/v1/me/onboarding/complete`, {
+    method: 'POST', headers: { Authorization: `Bearer ${token}` },
+  });
+  if (response.status === 401 || response.status === 403) throw new SessionExpiredError();
+  if (response.status === 409) throw new Error((await response.text()).trim() || 'Add your name, city, and photo first.');
+  if (!response.ok) throw new Error('Could not finish onboarding. Please try again.');
+  return parseProfile(await response.json());
 }
 
 export async function syncProfileImage(apiUrl: string, getToken: () => Promise<string | null>, request: typeof fetch = fetch): Promise<Profile> {

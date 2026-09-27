@@ -6,12 +6,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { fetchMyProfile, Profile, ProfileInput, saveMyProfile, SessionExpiredError, syncProfileImage } from '@/lib/profile-api';
+import { completeOnboarding, fetchMyProfile, Profile, ProfileInput, saveMyProfile, SessionExpiredError, syncProfileImage } from '@/lib/profile-api';
 import { Avatar } from '@/components/avatar';
 import { Connection, fetchConnections } from '@/lib/connections-api';
 import { useUserEvents } from '@/lib/use-user-events';
 import { AuthScreen } from '@/screens/auth';
 import { ProfileEditor } from '@/screens/profile-editor';
+import { Onboarding } from '@/screens/onboarding';
 import { PeopleDiscover } from '@/screens/people-discover';
 import { CityFeed } from '@/screens/city-feed';
 import { Chats } from '@/screens/chats';
@@ -37,7 +38,7 @@ export default function HomeScreen() {
   const { data: connections, error: connectionsError } = useQuery<Connection[], Error>({
     queryKey: ['connections', userId],
     queryFn: () => fetchConnections(apiUrl!, getToken),
-    enabled: isLoaded && isSignedIn && !!userId && !!apiUrl,
+    enabled: isLoaded && isSignedIn && !!userId && !!apiUrl && !!profile?.onboardingComplete,
     retry: (failures, failure) => !(failure instanceof SessionExpiredError) && failures < 1,
   });
   const pendingRequests = connections?.filter((item) => item.status === 'incoming').length ?? 0;
@@ -70,22 +71,46 @@ export default function HomeScreen() {
 
   const signOutLocal = useCallback(() => { queryClient.clear(); void signOut(); }, [queryClient, signOut]);
 
+  const syncImage = async () => {
+    try {
+      const updated = await syncProfileImage(apiUrl!, getToken);
+      queryClient.setQueryData(['profile', userId], updated);
+      void queryClient.invalidateQueries({ queryKey: ['people', userId] });
+      void queryClient.invalidateQueries({ queryKey: ['connections', userId] });
+      void queryClient.invalidateQueries({ queryKey: ['posts', userId] });
+    } catch (failure) {
+      if (failure instanceof SessionExpiredError) signOutLocal();
+      throw failure;
+    }
+  };
+
   if (!isLoaded) return <CenteredLoading />;
   if (!isSignedIn) return showAuth ? <AuthScreen onBack={() => setShowAuth(false)} /> : <WelcomeScreen onContinue={() => setShowAuth(true)} />;
-  if (editing && profile) return <ProfileEditor profile={profile} onBack={() => setEditing(false)} onSave={async (input) => { await saveProfile.mutateAsync(input); }} onImageChanged={async () => {
-    const updated = await syncProfileImage(apiUrl!, getToken);
-    queryClient.setQueryData(['profile', userId], updated);
-    void queryClient.invalidateQueries({ queryKey: ['people', userId] });
-    void queryClient.invalidateQueries({ queryKey: ['connections', userId] });
-    void queryClient.invalidateQueries({ queryKey: ['posts', userId] });
-  }} />;
+  if (!apiUrl || profileError) return <SafeAreaView style={styles.app} edges={['top', 'bottom']}><View style={styles.centered}><Ionicons name="cloud-offline-outline" size={30} color={colors.accent} /><Text style={styles.errorTitle}>Profile unavailable</Text><Text style={styles.bodyMuted}>{profileError?.message ?? 'Set EXPO_PUBLIC_API_URL in apps/mobile/.env.local'}</Text><Pressable style={styles.secondaryButton} onPress={signOutLocal}><Text style={styles.secondaryButtonText}>Sign out</Text></Pressable></View></SafeAreaView>;
+  if (profilePending || !profile) return <CenteredLoading />;
+  if (!profile.onboardingComplete) return <Onboarding profile={profile} onSave={async (input) => {
+    try {
+      const saved = await saveMyProfile(apiUrl, getToken, input);
+      queryClient.setQueryData(['profile', userId], saved);
+    } catch (failure) {
+      if (failure instanceof SessionExpiredError) signOutLocal();
+      throw failure;
+    }
+  }} onSyncImage={syncImage} onComplete={async () => {
+    try {
+      const completed = await completeOnboarding(apiUrl, getToken);
+      queryClient.setQueryData(['profile', userId], completed);
+    } catch (failure) {
+      if (failure instanceof SessionExpiredError) signOutLocal();
+      throw failure;
+    }
+  }} onSignOut={signOutLocal} />;
+  if (editing) return <ProfileEditor profile={profile} onBack={() => setEditing(false)} onSave={async (input) => { await saveProfile.mutateAsync(input); }} onImageChanged={syncImage} />;
 
   const name = profile?.displayName || user?.firstName || 'Explorer';
   return <SafeAreaView style={styles.app} edges={['top', 'bottom']}>
     <View style={styles.topbar}><Brand /><View style={styles.cityPill}><Ionicons name="location-outline" size={15} color={colors.accent} /><Text style={styles.cityPillText} numberOfLines={1}>{profile?.city || 'Choose a city'}</Text></View></View>
-    {profilePending && !profile && apiUrl ? <CenteredLoading /> : profileError || !apiUrl ?
-      <View style={styles.centered}><Ionicons name="cloud-offline-outline" size={30} color={colors.accent} /><Text style={styles.errorTitle}>Profile unavailable</Text><Text style={styles.bodyMuted}>{profileError?.message ?? 'Set EXPO_PUBLIC_API_URL in apps/mobile/.env.local'}</Text><Pressable style={styles.secondaryButton} onPress={signOutLocal}><Text style={styles.secondaryButtonText}>Sign out</Text></Pressable></View> :
-      tab === 'discover' ? <PeopleDiscover apiUrl={apiUrl} userId={userId!} city={profile?.city ?? ''} getToken={getToken} onMyProfile={() => setTab('profile')} onSessionExpired={signOutLocal} /> : tab === 'feed' ? <CityFeed apiUrl={apiUrl} userId={userId!} city={profile?.city ?? ''} getToken={getToken} onMyProfile={() => setTab('profile')} onSessionExpired={signOutLocal} /> : tab === 'chat' ? <Chats apiUrl={apiUrl} userId={userId!} getToken={getToken} onSessionExpired={signOutLocal} /> :
+    {tab === 'discover' ? <PeopleDiscover apiUrl={apiUrl} userId={userId!} city={profile.city} getToken={getToken} onMyProfile={() => setTab('profile')} onSessionExpired={signOutLocal} /> : tab === 'feed' ? <CityFeed apiUrl={apiUrl} userId={userId!} city={profile.city} getToken={getToken} onMyProfile={() => setTab('profile')} onSessionExpired={signOutLocal} /> : tab === 'chat' ? <Chats apiUrl={apiUrl} userId={userId!} getToken={getToken} onSessionExpired={signOutLocal} /> :
         <ProfileScreen profile={profile ?? null} name={name} imageUrl={user ? (user.hasImage ? user.imageUrl : '') : (profile?.imageUrl ?? '')} email={user?.primaryEmailAddress?.emailAddress ?? ''} onEdit={() => setEditing(true)} onSignOut={signOutLocal} />}
     <View style={styles.tabbar} accessibilityRole="tablist">
       <Pressable accessibilityRole="tab" accessibilityLabel={pendingRequests ? `Discover, ${pendingRequests} incoming connection requests` : 'Discover'} accessibilityState={{ selected: tab === 'discover' }} style={styles.tab} onPress={() => setTab('discover')}><View><Ionicons name={tab === 'discover' ? 'compass' : 'compass-outline'} size={22} color={tab === 'discover' ? colors.accent : colors.muted} /><CountBadge count={pendingRequests} /></View><Text style={[styles.tabLabel, tab === 'discover' && styles.tabSelected]}>Discover</Text></Pressable>

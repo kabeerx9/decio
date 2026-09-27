@@ -28,7 +28,25 @@ func New(ctx context.Context, databaseURL string) (*Store, error) {
 		pool.Close()
 		return nil, err
 	}
-	if _, err := pool.Exec(ctx, string(statement)); err != nil {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		pool.Close()
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+	// Serialize schema upgrades when multiple API instances start together.
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(1984265324)`); err != nil {
+		_ = tx.Rollback(ctx)
+		pool.Close()
+		return nil, err
+	}
+	if _, err := tx.Exec(ctx, string(statement)); err != nil {
+		_ = tx.Rollback(ctx)
+		pool.Close()
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		_ = tx.Rollback(ctx)
 		pool.Close()
 		return nil, err
 	}

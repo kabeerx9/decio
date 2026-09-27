@@ -36,6 +36,12 @@ func TestCityPostsScopePaginationAndPhoto(t *testing.T) {
 		if _, err := store.Update(ctx, person.id, domain.ProfileInput{DisplayName: person.id, City: person.city, Interests: []string{}}); err != nil {
 			t.Fatal(err)
 		}
+		if _, err := store.SetProfileImageURL(ctx, person.id, "https://images.clerk.test/avatar.jpg"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := store.CompleteOnboarding(ctx, person.id); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if _, err := store.SetProfileImageURL(ctx, author, "https://images.clerk.test/author.jpg"); err != nil {
 		t.Fatal(err)
@@ -46,12 +52,15 @@ func TestCityPostsScopePaginationAndPhoto(t *testing.T) {
 	if _, err := store.FindOrCreate(ctx, blank); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := store.Update(ctx, blank, domain.ProfileInput{DisplayName: "Unfinished Author", City: "Mumbai", Interests: []string{}}); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := store.CreatePost(ctx, blank, "bad", nil, ""); !errors.Is(err, domain.ErrProfileIncomplete) {
-		t.Fatalf("blank profile: %v", err)
+		t.Fatalf("unfinished profile: %v", err)
 	}
 	page, err := store.ListPosts(ctx, blank, "")
 	if err != nil || page.City != "" || len(page.Posts) != 0 {
-		t.Fatalf("blank city: %+v %v", page, err)
+		t.Fatalf("unfinished viewer: %+v %v", page, err)
 	}
 	for i := 0; i < 22; i++ {
 		var photo []byte

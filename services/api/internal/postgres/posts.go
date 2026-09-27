@@ -15,7 +15,7 @@ func (s *Store) CreatePost(ctx context.Context, authorID, body string, photo []b
 		WITH inserted AS (
 			INSERT INTO city_posts (author_id, city, body, photo, photo_type)
 			SELECT id, city, $2, $3, NULLIF($4, '') FROM profiles
-			WHERE id = $1 AND city <> '' AND display_name <> ''
+			WHERE id = $1 AND onboarding_completed_at IS NOT NULL
 			RETURNING id, author_id, city, body, photo IS NOT NULL AS has_photo, created_at
 		)
 		SELECT i.id, i.author_id, p.display_name, p.image_url, i.city, i.body, i.has_photo, i.created_at
@@ -29,7 +29,7 @@ func (s *Store) CreatePost(ctx context.Context, authorID, body string, photo []b
 
 func (s *Store) ListPosts(ctx context.Context, viewerID, cursor string) (domain.PostPage, error) {
 	page := domain.PostPage{Posts: []domain.Post{}}
-	if err := s.pool.QueryRow(ctx, `SELECT city FROM profiles WHERE id = $1`, viewerID).Scan(&page.City); err != nil {
+	if err := s.pool.QueryRow(ctx, `SELECT city FROM profiles WHERE id = $1 AND onboarding_completed_at IS NOT NULL`, viewerID).Scan(&page.City); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return page, nil
 		}
@@ -74,7 +74,7 @@ func (s *Store) PostPhoto(ctx context.Context, viewerID, postID string) ([]byte,
 	var kind string
 	err := s.pool.QueryRow(ctx, `
 		SELECT cp.photo, cp.photo_type FROM city_posts cp
-		JOIN profiles viewer ON viewer.id = $1 AND viewer.city <> '' AND lower(viewer.city) = lower(cp.city)
+		JOIN profiles viewer ON viewer.id = $1 AND viewer.onboarding_completed_at IS NOT NULL AND lower(viewer.city) = lower(cp.city)
 		WHERE cp.id = $2 AND cp.photo IS NOT NULL
 	`, viewerID, postID).Scan(&photo, &kind)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -89,7 +89,7 @@ func (s *Store) CreateReply(ctx context.Context, authorID, postID, body string) 
 		WITH inserted AS (
 			INSERT INTO post_replies (post_id, author_id, body)
 			SELECT cp.id, author.id, $3 FROM city_posts cp
-			JOIN profiles author ON author.id = $1 AND author.city <> '' AND author.display_name <> ''
+			JOIN profiles author ON author.id = $1 AND author.onboarding_completed_at IS NOT NULL
 				AND lower(author.city) = lower(cp.city)
 			WHERE cp.id = $2
 			RETURNING id, post_id, author_id, body, created_at
@@ -113,7 +113,7 @@ func (s *Store) ListReplies(ctx context.Context, viewerID, postID, cursor string
 		SELECT r.id, r.post_id, r.author_id, p.display_name, p.image_url, r.body, r.created_at
 		FROM post_replies r JOIN profiles p ON p.id = r.author_id
 		JOIN city_posts cp ON cp.id = r.post_id
-		JOIN profiles viewer ON viewer.id = $1 AND viewer.city <> '' AND lower(viewer.city) = lower(cp.city)
+		JOIN profiles viewer ON viewer.id = $1 AND viewer.onboarding_completed_at IS NOT NULL AND lower(viewer.city) = lower(cp.city)
 		WHERE r.post_id = $2 AND r.id > $3
 		ORDER BY r.id ASC LIMIT 31
 	`, viewerID, postID, after)
@@ -137,7 +137,7 @@ func (s *Store) ListReplies(ctx context.Context, viewerID, postID, cursor string
 		var visible bool
 		if err := s.pool.QueryRow(ctx, `
 			SELECT EXISTS (SELECT 1 FROM city_posts cp
-			JOIN profiles viewer ON viewer.id = $1 AND viewer.city <> '' AND lower(viewer.city) = lower(cp.city)
+			JOIN profiles viewer ON viewer.id = $1 AND viewer.onboarding_completed_at IS NOT NULL AND lower(viewer.city) = lower(cp.city)
 			WHERE cp.id = $2)
 		`, viewerID, postID).Scan(&visible); err != nil {
 			return page, err

@@ -2,7 +2,9 @@ package postgres
 
 import (
 	"context"
+	"errors"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/kabeerx9/decio-update/services/api/internal/domain"
 )
 
@@ -12,8 +14,8 @@ func (s *Store) FindOrCreate(ctx context.Context, clerkUserID string) (domain.Pr
 		return domain.Profile{}, err
 	}
 	var profile domain.Profile
-	err = s.pool.QueryRow(ctx, `SELECT id, display_name, city, bio, headline, interests, image_url FROM profiles WHERE id = $1`, clerkUserID).
-		Scan(&profile.ID, &profile.DisplayName, &profile.City, &profile.Bio, &profile.Headline, &profile.Interests, &profile.ImageURL)
+	err = s.pool.QueryRow(ctx, `SELECT id, display_name, city, bio, headline, interests, image_url, onboarding_completed_at IS NOT NULL FROM profiles WHERE id = $1`, clerkUserID).
+		Scan(&profile.ID, &profile.DisplayName, &profile.City, &profile.Bio, &profile.Headline, &profile.Interests, &profile.ImageURL, &profile.OnboardingComplete)
 	return profile, err
 }
 
@@ -28,9 +30,9 @@ func (s *Store) Update(ctx context.Context, clerkUserID string, input domain.Pro
 			bio = EXCLUDED.bio,
 			headline = EXCLUDED.headline,
 			interests = EXCLUDED.interests
-		RETURNING id, display_name, city, bio, headline, interests, image_url
+		RETURNING id, display_name, city, bio, headline, interests, image_url, onboarding_completed_at IS NOT NULL
 	`, clerkUserID, input.DisplayName, input.City, input.Bio, input.Headline, input.Interests).
-		Scan(&profile.ID, &profile.DisplayName, &profile.City, &profile.Bio, &profile.Headline, &profile.Interests, &profile.ImageURL)
+		Scan(&profile.ID, &profile.DisplayName, &profile.City, &profile.Bio, &profile.Headline, &profile.Interests, &profile.ImageURL, &profile.OnboardingComplete)
 	return profile, err
 }
 
@@ -39,7 +41,20 @@ func (s *Store) SetProfileImageURL(ctx context.Context, userID, imageURL string)
 	err := s.pool.QueryRow(ctx, `
 		INSERT INTO profiles (id, image_url) VALUES ($1, $2)
 		ON CONFLICT (id) DO UPDATE SET image_url = EXCLUDED.image_url
-		RETURNING id, display_name, city, bio, headline, interests, image_url
-	`, userID, imageURL).Scan(&profile.ID, &profile.DisplayName, &profile.City, &profile.Bio, &profile.Headline, &profile.Interests, &profile.ImageURL)
+		RETURNING id, display_name, city, bio, headline, interests, image_url, onboarding_completed_at IS NOT NULL
+	`, userID, imageURL).Scan(&profile.ID, &profile.DisplayName, &profile.City, &profile.Bio, &profile.Headline, &profile.Interests, &profile.ImageURL, &profile.OnboardingComplete)
+	return profile, err
+}
+
+func (s *Store) CompleteOnboarding(ctx context.Context, userID string) (domain.Profile, error) {
+	var profile domain.Profile
+	err := s.pool.QueryRow(ctx, `
+		UPDATE profiles SET onboarding_completed_at = COALESCE(onboarding_completed_at, NOW())
+		WHERE id = $1 AND length(trim(display_name)) >= 2 AND length(trim(city)) >= 2 AND image_url <> ''
+		RETURNING id, display_name, city, bio, headline, interests, image_url, onboarding_completed_at IS NOT NULL
+	`, userID).Scan(&profile.ID, &profile.DisplayName, &profile.City, &profile.Bio, &profile.Headline, &profile.Interests, &profile.ImageURL, &profile.OnboardingComplete)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.Profile{}, domain.ErrProfileIncomplete
+	}
 	return profile, err
 }

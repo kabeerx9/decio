@@ -46,11 +46,20 @@ func TestConnectionAuthorizationAndStateTransitions(t *testing.T) {
 		if _, err := store.Update(ctx, id, domain.ProfileInput{DisplayName: id, City: "Mumbai", Interests: []string{}}); err != nil {
 			t.Fatal(err)
 		}
+		if _, err := store.SetProfileImageURL(ctx, id, "https://images.clerk.test/avatar.jpg"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := store.CompleteOnboarding(ctx, id); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if _, err := store.SetProfileImageURL(ctx, ids[1], "https://images.clerk.test/connection.jpg"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.FindOrCreate(ctx, ids[3]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Update(ctx, ids[3], domain.ProfileInput{DisplayName: "Unfinished User", City: "Mumbai", Interests: []string{}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.RequestConnection(ctx, ids[3], ids[0]); !errors.Is(err, domain.ErrProfileIncomplete) {

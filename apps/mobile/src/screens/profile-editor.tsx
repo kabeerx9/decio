@@ -1,16 +1,14 @@
 import { useUser } from '@clerk/expo';
 import { Ionicons } from '@expo/vector-icons';
-import { File } from 'expo-file-system';
-import * as ImageManipulator from 'expo-image-manipulator';
-import * as ImagePicker from 'expo-image-picker';
 import { useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CityPicker } from '@/components/city-picker';
 import { Avatar } from '@/components/avatar';
 import { normalizeProfileInput, Profile, ProfileInput, validateProfileInput } from '@/lib/profile-api';
+import { uploadProfilePhoto } from '@/lib/profile-photo';
 import { colors, fonts } from '@/theme';
 
 export function ProfileEditor({ profile, onBack, onSave, onImageChanged }: { profile: Profile; onBack: () => void; onSave: (input: ProfileInput) => Promise<void>; onImageChanged: () => Promise<void> }) {
@@ -54,22 +52,15 @@ export function ProfileEditor({ profile, onBack, onSave, onImageChanged }: { pro
     if (!user || imageBusy) return;
     setImageError('');
     try {
-      let file: Blob | null = null;
       if (!remove) {
-        const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
-        if (picked.canceled) return;
-        const asset = picked.assets[0];
-        const context = ImageManipulator.ImageManipulator.manipulate(asset.uri);
-        if (asset.width > 800 || asset.height > 800) context.resize(asset.width >= asset.height ? { width: 800, height: null } : { width: null, height: 800 });
-        const rendered = await context.renderAsync();
-        const saved = await rendered.saveAsync({ format: ImageManipulator.SaveFormat.JPEG, compress: 0.82 });
-        file = Platform.OS === 'web' ? await (await fetch(saved.uri)).blob() : new File(saved.uri);
-        if (file.size > 4 * 1024 * 1024) throw new Error('Choose a smaller photo.');
+        setImageBusy(true);
+        if (!await uploadProfilePhoto(user)) return;
+      } else {
+        setImageBusy(true);
+        await user.setProfileImage({ file: null });
+        await user.reload();
       }
-      setImageBusy(true);
-      await user.setProfileImage({ file });
       setNeedsSync(true);
-      await user.reload();
       await syncImage();
     } catch (failure) {
       setImageError(failure instanceof Error ? failure.message : 'Could not update your photo. Try again.');

@@ -13,11 +13,9 @@ import (
 func (s *Store) RequestConnection(ctx context.Context, requesterID, recipientID string) error {
 	var requesterReady, recipientReady bool
 	if err := s.pool.QueryRow(ctx, `SELECT EXISTS (
-		SELECT 1 FROM profiles WHERE id = $1 AND display_name <> ''
-	) AND EXISTS (
-		SELECT 1 FROM profiles WHERE id = $1 AND city <> ''
+		SELECT 1 FROM profiles WHERE id = $1 AND onboarding_completed_at IS NOT NULL
 	), EXISTS (
-		SELECT 1 FROM profiles WHERE id = $2 AND display_name <> ''
+		SELECT 1 FROM profiles WHERE id = $2 AND onboarding_completed_at IS NOT NULL
 	)`, requesterID, recipientID).Scan(&requesterReady, &recipientReady); err != nil {
 		return err
 	}
@@ -58,7 +56,7 @@ func (s *Store) AcceptConnection(ctx context.Context, recipientID, requesterID s
 // ListConnections projects each relationship from the current user's side.
 func (s *Store) ListConnections(ctx context.Context, userID string) ([]domain.Connection, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT p.id, p.display_name, p.city, p.bio, p.headline, p.interests, p.image_url,
+		SELECT p.id, p.display_name, p.city, p.bio, p.headline, p.interests, p.image_url, p.onboarding_completed_at IS NOT NULL,
 			CASE WHEN c.status = 'accepted' THEN 'accepted'
 			     WHEN c.recipient_id = $1 THEN 'incoming' ELSE 'sent' END,
 			COALESCE(unread.count, 0)
@@ -80,7 +78,7 @@ func (s *Store) ListConnections(ctx context.Context, userID string) ([]domain.Co
 	connections := []domain.Connection{}
 	for rows.Next() {
 		var connection domain.Connection
-		if err := rows.Scan(&connection.Other.ID, &connection.Other.DisplayName, &connection.Other.City, &connection.Other.Bio, &connection.Other.Headline, &connection.Other.Interests, &connection.Other.ImageURL, &connection.Status, &connection.UnreadCount); err != nil {
+		if err := rows.Scan(&connection.Other.ID, &connection.Other.DisplayName, &connection.Other.City, &connection.Other.Bio, &connection.Other.Headline, &connection.Other.Interests, &connection.Other.ImageURL, &connection.Other.OnboardingComplete, &connection.Status, &connection.UnreadCount); err != nil {
 			return nil, err
 		}
 		connections = append(connections, connection)

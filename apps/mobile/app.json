@@ -41,7 +41,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow Decio to choose a photo for your city post."
+          "photosPermission": "Allow Decio to choose a profile photo or city post photo."
         }
       ]
     ],
