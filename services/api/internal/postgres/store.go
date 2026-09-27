@@ -2,13 +2,11 @@ package postgres
 
 import (
 	"context"
-	"embed"
+	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/kabeerx9/decio-update/services/api/internal/migrations"
 )
-
-//go:embed schema.sql
-var schema embed.FS
 
 type Store struct {
 	pool *pgxpool.Pool
@@ -23,32 +21,15 @@ func New(ctx context.Context, databaseURL string) (*Store, error) {
 		pool.Close()
 		return nil, err
 	}
-	statement, err := schema.ReadFile("schema.sql")
-	if err != nil {
+	var version int
+	var dirty bool
+	if err := pool.QueryRow(ctx, "SELECT version, dirty FROM schema_migrations").Scan(&version, &dirty); err != nil {
 		pool.Close()
-		return nil, err
+		return nil, fmt.Errorf("check schema migrations (run go run ./cmd/migrate up): %w", err)
 	}
-	tx, err := pool.Begin(ctx)
-	if err != nil {
+	if dirty || version < migrations.CurrentVersion {
 		pool.Close()
-		return nil, err
-	}
-	defer tx.Rollback(ctx)
-	// Serialize schema upgrades when multiple API instances start together.
-	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(1984265324)`); err != nil {
-		_ = tx.Rollback(ctx)
-		pool.Close()
-		return nil, err
-	}
-	if _, err := tx.Exec(ctx, string(statement)); err != nil {
-		_ = tx.Rollback(ctx)
-		pool.Close()
-		return nil, err
-	}
-	if err := tx.Commit(ctx); err != nil {
-		_ = tx.Rollback(ctx)
-		pool.Close()
-		return nil, err
+		return nil, fmt.Errorf("database migration state is version %d (dirty=%t); require version %d (run go run ./cmd/migrate up)", version, dirty, migrations.CurrentVersion)
 	}
 	return &Store{pool: pool}, nil
 }

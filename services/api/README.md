@@ -7,7 +7,9 @@ cmd/server/main.go          configuration and dependency wiring
 internal/domain/            shared data shapes, validation, and business errors
 internal/httpapi/           Clerk authentication, HTTP routes, request/response handling
 internal/service/           connection and chat write orchestration, event delivery policy
-internal/postgres/          SQL queries, connection pool, and embedded schema
+internal/postgres/          SQL queries, connection pool, and schema-version check
+internal/migrations/        versioned SQL migrations and migration runner
+cmd/migrate/                explicit database upgrade command
 internal/realtime/          Ably token signing and event publishing
 ```
 
@@ -29,4 +31,12 @@ The small store interfaces live with their consumer in `httpapi` and `service`. 
 
 Go keeps `_test.go` files next to the package they test. They compile only during `go test`; they are not production files. This is also the layout shown in [Go's module guide](https://go.dev/doc/modules/layout). To see only implementation files, use `rg --files internal -g '*.go' -g '!**/*_test.go'`.
 
-Run `go test ./...`. With local Postgres, set `TEST_DATABASE_URL=postgres://decio:decio@localhost:5433/decio?sslmode=disable` to include SQL integration tests.
+## Database migrations
+
+The API never changes schema at startup. From `services/api`, set `DATABASE_URL`, then run `go run ./cmd/migrate up` before starting a new API version. `go run ./cmd/migrate version` shows the recorded version and dirty state. An unmigrated, outdated, or dirty database prevents API startup.
+
+SQL files in `internal/migrations/sql/` are append-only. `000001` represents the original five-table schema; `000002` adds replies, `000003` adds profile images, and `000004` adds onboarding completion with a one-time backfill for existing named profiles. These transition migrations accept schema changes already made by the former API startup behavior. For future changes, add a new numbered `.up.sql` file and increment `CurrentVersion` in `internal/migrations/migrations.go`; never edit a migration after it has been deployed. Production migrations are forward-only: fix a bad migration with a new one rather than dropping tables or columns to roll back.
+
+Back up Supabase's `public` schema and data before a production migration. For example, with `DATABASE_URL` set, run `umask 077; pg_dump "$DATABASE_URL" --schema=public --format=custom --no-owner --no-acl --file=/private/backup/location/decio-before-migration.dump`. Keep the backup outside the repository. Run only one migrator at a time. If a run leaves a dirty version, inspect the database and the failed SQL before repairing its recorded state; do not blindly force a version.
+
+For local development, run `docker compose up -d postgres` from the repository root and `DATABASE_URL=postgres://decio:decio@localhost:5433/decio?sslmode=disable go run ./cmd/migrate up` from `services/api`. Then run `go test ./...`. Set `TEST_DATABASE_URL=postgres://decio:decio@localhost:5433/decio?sslmode=disable` to include SQL integration tests; they require the main local test database to have been migrated first. Migration tests create and drop their own temporary databases.
