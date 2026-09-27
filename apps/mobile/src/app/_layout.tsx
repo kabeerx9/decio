@@ -29,7 +29,7 @@ export default function RootLayout() {
     });
     return () => listener.remove();
   }, []);
-  if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: colors.paper, justifyContent: 'center' }}><ActivityIndicator color={colors.blue} /></View>;
+  if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: colors.paper, justifyContent: 'center' }}><ActivityIndicator color={colors.accent} /></View>;
   if (!publishableKey) throw new Error('Set EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY in apps/mobile/.env.local');
   return <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}><QueryClientProvider client={queryClient}><KeyboardProvider><Slot /></KeyboardProvider></QueryClientProvider></ClerkProvider>;
 }

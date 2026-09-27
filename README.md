@@ -4,7 +4,7 @@ A people-first city network rebuilt with Expo, Go, Clerk, Postgres, and Ably. Th
 
 ## Project map
 
-- [`apps/mobile`](apps/mobile): Expo Router app, Clerk session, TanStack Query, Street Atlas UI.
+- [`apps/mobile`](apps/mobile): Expo Router app, Clerk session, TanStack Query, and Decio's mobile UI.
 - [`services/api`](services/api): Go HTTP API, Clerk token verification, and Postgres persistence. See its [package and request-flow map](services/api/README.md).
 - [`compose.yaml`](compose.yaml): optional local Postgres for development and integration tests.
 - [GitHub milestone map](https://github.com/kabeerx9/decio-update/issues/1): decisions, tickets, and blockers.
@@ -68,4 +68,4 @@ With local Postgres running, set `TEST_DATABASE_URL=postgres://decio:decio@local
 
 ## Design direction
 
-The signed-in Discover screen follows the Street Atlas direction: city context, a prominent search field, large member placeholders, and compact results. The API has no member-photo field yet, so the app uses initials instead of stock portraits. A curated [Mumbai city photo by Shamoil on Unsplash](https://unsplash.com/photos/a-large-body-of-water-with-a-city-in-the-background-67mH8hKs_Ao) appears only when the selected city is Mumbai, under the [Unsplash License](https://unsplash.com/license). Other cities use the ink-color header until an accurate photo is curated. City selection uses Expo UI's native-backed modal sheet with a search field and a custom city option; no location permission is requested. TanStack Query owns remote data cache. React Native Keyboard Controller keeps auth and profile forms above the keyboard. People search matches name, city, and headline, while profiles remain visible only to signed-in users.
+Decio uses a warm social identity: plum for structure, coral for actions, and soft lilac for people and supporting surfaces. The rounded D mark ends at a meeting point; its SVG masters live in [`apps/mobile/assets/brand`](apps/mobile/assets/brand), with PNG exports for native app icons and the in-app header. Discover starts with search and incoming requests, then shows connections and people who are still new to the viewer. Connected people do not repeat in the default discovery list. The feed keeps the post composer closed until someone chooses to write, leaving more room for posts. The API has no member-photo field yet, so the app uses initials rather than unrelated stock portraits. City selection uses Expo UI's native-backed modal sheet with a search field and a custom city option; no location permission is requested. TanStack Query owns remote data cache. React Native Keyboard Controller keeps auth and profile forms above the keyboard. People search matches name, city, and headline, while profiles remain visible only to signed-in users.

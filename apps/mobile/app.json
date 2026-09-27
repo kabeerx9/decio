@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Decio Update",
+    "name": "Decio",
     "slug": "decio-update",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -8,12 +8,12 @@
     "scheme": "decio-update",
     "userInterfaceStyle": "light",
     "ios": {
-      "icon": "./assets/expo.icon",
+      "icon": "./assets/images/icon.png",
       "bundleIdentifier": "com.kabeerx9.decioupdate"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#F7F9FC",
+        "backgroundColor": "#30263D",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -30,7 +30,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#F7F9FC",
+          "backgroundColor": "#30263D",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
