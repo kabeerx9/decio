@@ -8,7 +8,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/kabeerx9/decio-update/services/api/internal/domain"
+	"github.com/kabeerx9/decio/services/api/internal/domain"
 )
 
 type ProfileStore interface {

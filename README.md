@@ -1,4 +1,4 @@
-# Decio Update
+# Decio
 
 A people-first city network rebuilt with Expo, Go, Clerk, Postgres, and Ably. The first milestone is intentionally small: sign-in, profile, people search, connections, city posts, and direct chat. The current code implements sign-in, profile editing, people search, connection requests, city posts, and direct chat.
 
@@ -7,7 +7,7 @@ A people-first city network rebuilt with Expo, Go, Clerk, Postgres, and Ably. Th
 - [`apps/mobile`](apps/mobile): Expo Router app, Clerk session, TanStack Query, and Decio's mobile UI.
 - [`services/api`](services/api): Go HTTP API, Clerk token verification, and Postgres persistence. See its [package and request-flow map](services/api/README.md).
 - [`compose.yaml`](compose.yaml): optional local Postgres for development and integration tests.
-- [GitHub milestone map](https://github.com/kabeerx9/decio-update/issues/1): decisions, tickets, and blockers.
+- [GitHub milestone map](https://github.com/kabeerx9/decio/issues/1): decisions, tickets, and blockers.
 
 ## Accounts created
 

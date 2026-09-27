@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/clerk/clerk-sdk-go/v2"
-	"github.com/kabeerx9/decio-update/services/api/internal/httpapi"
-	"github.com/kabeerx9/decio-update/services/api/internal/postgres"
-	"github.com/kabeerx9/decio-update/services/api/internal/realtime"
+	"github.com/kabeerx9/decio/services/api/internal/httpapi"
+	"github.com/kabeerx9/decio/services/api/internal/postgres"
+	"github.com/kabeerx9/decio/services/api/internal/realtime"
 )
 
 func main() {

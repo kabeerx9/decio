@@ -7,7 +7,7 @@ import (
 	"os"
 
 	"github.com/golang-migrate/migrate/v4"
-	"github.com/kabeerx9/decio-update/services/api/internal/migrations"
+	"github.com/kabeerx9/decio/services/api/internal/migrations"
 )
 
 func main() {

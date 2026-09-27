@@ -1,15 +1,15 @@
 {
   "expo": {
     "name": "Decio",
-    "slug": "decio-update",
+    "slug": "decio",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "decio-update",
+    "scheme": "decio",
     "userInterfaceStyle": "dark",
     "ios": {
       "icon": "./assets/images/icon.png",
-      "bundleIdentifier": "com.kabeerx9.decioupdate"
+      "bundleIdentifier": "com.kabeerx9.decio"
     },
     "android": {
       "adaptiveIcon": {
@@ -19,7 +19,10 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.kabeerx9.decioupdate"
+      "package": "com.kabeerx9.decio",
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "output": "static",
@@ -48,6 +51,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "f5639cbe-47a5-414e-84e8-a9181e9935ef"
+      }
+    },
+    "owner": "kabeerx9"
   }
 }

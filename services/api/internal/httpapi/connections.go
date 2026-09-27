@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/kabeerx9/decio-update/services/api/internal/domain"
-	"github.com/kabeerx9/decio-update/services/api/internal/service"
+	"github.com/kabeerx9/decio/services/api/internal/domain"
+	"github.com/kabeerx9/decio/services/api/internal/service"
 )
 
 type ConnectionStore interface {

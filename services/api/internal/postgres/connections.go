@@ -5,7 +5,7 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/kabeerx9/decio-update/services/api/internal/domain"
+	"github.com/kabeerx9/decio/services/api/internal/domain"
 )
 
 // RequestConnection inserts one pending relationship for an unordered user pair.

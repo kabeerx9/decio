@@ -1,7 +1,7 @@
 package httpapi
 
 import (
-	"github.com/kabeerx9/decio-update/services/api/internal/domain"
+	"github.com/kabeerx9/decio/services/api/internal/domain"
 	"net/http"
 	"net/http/httptest"
 	"strings"

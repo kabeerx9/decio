@@ -2,7 +2,7 @@ package httpapi
 
 import (
 	"bytes"
-	"github.com/kabeerx9/decio-update/services/api/internal/domain"
+	"github.com/kabeerx9/decio/services/api/internal/domain"
 	"image"
 	"image/color"
 	"image/jpeg"

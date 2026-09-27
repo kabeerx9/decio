@@ -12,8 +12,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/kabeerx9/decio-update/services/api/internal/domain"
-	"github.com/kabeerx9/decio-update/services/api/internal/service"
+	"github.com/kabeerx9/decio/services/api/internal/domain"
+	"github.com/kabeerx9/decio/services/api/internal/service"
 )
 
 var clientMessageIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)

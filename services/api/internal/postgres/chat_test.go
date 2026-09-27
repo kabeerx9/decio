@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kabeerx9/decio-update/services/api/internal/domain"
+	"github.com/kabeerx9/decio/services/api/internal/domain"
 )
 
 func TestChatHistoryAuthorizationPaginationAndRetries(t *testing.T) {

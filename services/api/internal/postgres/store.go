@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/kabeerx9/decio-update/services/api/internal/migrations"
+	"github.com/kabeerx9/decio/services/api/internal/migrations"
 )
 
 type Store struct {

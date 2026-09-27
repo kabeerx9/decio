@@ -1,4 +1,4 @@
-module github.com/kabeerx9/decio-update/services/api
+module github.com/kabeerx9/decio/services/api
 
 go 1.25.0
 

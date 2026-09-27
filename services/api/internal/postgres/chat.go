@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/kabeerx9/decio-update/services/api/internal/domain"
+	"github.com/kabeerx9/decio/services/api/internal/domain"
 )
 
 func (s *Store) SendMessage(ctx context.Context, senderID, otherID, clientMessageID, body string) (domain.DirectMessage, error) {
