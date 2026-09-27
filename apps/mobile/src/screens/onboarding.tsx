@@ -11,6 +11,7 @@ import { PersonCard } from '@/components/person-card';
 import { Pill } from '@/components/pill';
 import { Screen } from '@/components/screen';
 import { Title } from '@/components/title';
+import { confirmSignOut } from '@/lib/confirm';
 import { success, tick } from '@/lib/haptics';
 import { ProfileInput, validateProfileInput } from '@/lib/profile-api';
 import { uploadProfilePhoto } from '@/lib/profile-photo';
@@ -116,7 +117,7 @@ export function Onboarding() {
         ? <Pressable accessibilityRole="button" accessibilityLabel="Previous step" hitSlop={8} onPress={back} style={styles.back}><Ionicons name="arrow-back" size={22} color={colors.ink} /></Pressable>
         : <View style={styles.back} />}
       <View style={styles.progress}>{steps.slice(1).map((item, position) => <View key={item} style={[styles.segment, position < index && { backgroundColor: tint }]} />)}</View>
-      <Pressable accessibilityRole="button" hitSlop={10} onPress={signOutLocal}><Text style={styles.signOut}>sign out</Text></Pressable>
+      <Pressable accessibilityRole="button" hitSlop={10} onPress={() => confirmSignOut(signOutLocal)}><Text style={styles.signOut}>sign out</Text></Pressable>
     </View>
     <KeyboardAvoidingView behavior="padding" style={styles.flex}>
       {/* The first step mounts with the screen; its entering animation froze on frame one on Android, so only step changes animate. */}

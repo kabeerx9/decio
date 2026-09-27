@@ -1,8 +1,8 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as Crypto from 'expo-crypto';
-import { router } from 'expo-router';
+import { router, useIsFocused } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, FlatList, StyleSheet, Text, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 
 import { BackHeader } from '@/components/back-header';
@@ -17,7 +17,7 @@ import { success } from '@/lib/haptics';
 import { fetchPublicProfile } from '@/lib/people-api';
 import { SessionExpiredError } from '@/lib/profile-api';
 import { useConnections } from '@/lib/queries';
-import { retryUnlessExpired, uniqueById } from '@/lib/selectors';
+import { readMarkerToSend, retryUnlessExpired, uniqueById } from '@/lib/selectors';
 import { useSession, useSignOutOnExpiry } from '@/lib/session';
 import { accent, colors, fonts } from '@/theme';
 
@@ -46,17 +46,27 @@ export function Conversation({ id }: { id: string }) {
     retry: retryUnlessExpired,
   });
   const newestLoadedId = history.data?.pages[0]?.messages[0]?.id;
+  // A chat stays mounted under the person screen and while the app is backgrounded;
+  // only a chat the user can actually see advances the read cursor.
+  const focused = useIsFocused();
+  const [appActive, setAppActive] = useState(AppState.currentState === 'active');
   useEffect(() => {
-    if (!newestLoadedId || newestLoadedId === lastMarked.current) return;
-    lastMarked.current = newestLoadedId;
-    void markMessagesRead(apiUrl, getToken, id, newestLoadedId).then(
+    const subscription = AppState.addEventListener('change', (state) => setAppActive(state === 'active'));
+    return () => subscription.remove();
+  }, []);
+  const visible = focused && appActive;
+  useEffect(() => {
+    const marker = readMarkerToSend({ visible, newestId: newestLoadedId, lastMarked: lastMarked.current });
+    if (!marker) return;
+    lastMarked.current = marker;
+    void markMessagesRead(apiUrl, getToken, id, marker).then(
       () => queryClient.invalidateQueries({ queryKey: ['connections', userId] }),
       (error: unknown) => {
         lastMarked.current = null;
         if (error instanceof SessionExpiredError) signOutLocal();
       },
     );
-  }, [apiUrl, getToken, id, newestLoadedId, queryClient, signOutLocal, userId]);
+  }, [apiUrl, getToken, id, newestLoadedId, queryClient, signOutLocal, userId, visible]);
   const send = useMutation({
     mutationFn: ({ id: clientMessageId, body }: { id: string; body: string }) => sendMessage(apiUrl, getToken, id, clientMessageId, body),
     onSuccess: (_message, sent) => {

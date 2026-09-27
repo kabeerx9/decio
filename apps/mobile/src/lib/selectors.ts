@@ -40,3 +40,15 @@ export function uniqueById<T extends { id: string }>(items: T[]): T[] {
     return true;
   });
 }
+
+// The server's read cursor only moves forward, so the client just decides *when* to advance it:
+// only while the chat is focused and the app is foregrounded, once per newest message.
+export function readMarkerToSend({ visible, newestId, lastMarked }: { visible: boolean; newestId: string | undefined; lastMarked: string | null }): string | null {
+  if (!visible || !newestId || newestId === lastMarked) return null;
+  return newestId;
+}
+
+// A rising unread total means a message just arrived; the first load (no previous value) never pings.
+export function unreadIncreased(previous: number | undefined, next: number): boolean {
+  return previous !== undefined && next > previous;
+}

@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import type { Connection } from './connections-api';
 import type { CityPost, PostPage } from './posts-api';
 import { Profile, SessionExpiredError } from './profile-api';
-import { connectionBadges, findCachedPost, groupConnections, retryUnlessExpired, uniqueById } from './selectors';
+import { connectionBadges, findCachedPost, groupConnections, readMarkerToSend, retryUnlessExpired, uniqueById, unreadIncreased } from './selectors';
 
 const person = (id: string): Profile => ({ id, displayName: id, city: 'Pune', bio: '', headline: '', interests: [], imageUrl: '', onboardingComplete: true });
 const connection = (id: string, status: Connection['status'], unreadCount = 0): Connection => ({ other: person(id), status, unreadCount });
@@ -38,4 +38,21 @@ test('findCachedPost searches every cached page and reports a miss', () => {
 test('uniqueById keeps the first occurrence when pages overlap', () => {
   const items = uniqueById([{ id: '1', v: 'first' }, { id: '2', v: 'x' }, { id: '1', v: 'dupe' }]);
   assert.deepEqual(items, [{ id: '1', v: 'first' }, { id: '2', v: 'x' }]);
+});
+
+test('readMarkerToSend only marks messages read while the chat is on screen', () => {
+  assert.equal(readMarkerToSend({ visible: false, newestId: 'm9', lastMarked: 'm8' }), null);
+  assert.equal(readMarkerToSend({ visible: true, newestId: 'm9', lastMarked: 'm8' }), 'm9');
+});
+
+test('readMarkerToSend skips a marker already sent and an empty history', () => {
+  assert.equal(readMarkerToSend({ visible: true, newestId: 'm9', lastMarked: 'm9' }), null);
+  assert.equal(readMarkerToSend({ visible: true, newestId: undefined, lastMarked: null }), null);
+});
+
+test('unreadIncreased pings only when the unread total goes up after the first load', () => {
+  assert.equal(unreadIncreased(undefined, 3), false);
+  assert.equal(unreadIncreased(2, 3), true);
+  assert.equal(unreadIncreased(3, 3), false);
+  assert.equal(unreadIncreased(3, 0), false);
 });

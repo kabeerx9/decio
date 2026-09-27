@@ -6,6 +6,7 @@ import { Chip } from '@/components/chip';
 import { Cover } from '@/components/cover';
 import { Pill } from '@/components/pill';
 import { Screen } from '@/components/screen';
+import { confirmSignOut } from '@/lib/confirm';
 import { useConnections } from '@/lib/queries';
 import { useSession } from '@/lib/session';
 import { accent, colors, fonts, radius } from '@/theme';
@@ -34,7 +35,7 @@ export function You() {
         <View style={styles.stat}><Text style={styles.statValue}>{pending}</Text><Text style={styles.statLabel}>pending</Text></View>
       </View>
       <View style={styles.row}><Text style={styles.rowLabel}>email</Text><Text style={styles.rowValue} numberOfLines={1}>{user?.primaryEmailAddress?.emailAddress ?? ''}</Text></View>
-      <Pressable accessibilityRole="button" onPress={signOutLocal} style={styles.row}><Text style={styles.signOut}>sign out</Text></Pressable>
+      <Pressable accessibilityRole="button" onPress={() => confirmSignOut(signOutLocal)} style={styles.row}><Text style={styles.signOut}>sign out</Text></Pressable>
     </ScrollView>
   </Screen>;
 }

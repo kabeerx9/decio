@@ -8,3 +8,7 @@ export function tick() {
 export function success() {
   void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
 }
+
+export function incoming() {
+  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+}
