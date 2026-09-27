@@ -74,3 +74,36 @@ func TestChatHistoryAndSendUseVerifiedIdentity(t *testing.T) {
 		t.Fatalf("conflicting retry status=%d events=%v", w.Code, events.messagePublished)
 	}
 }
+
+func TestMarkMessagesReadUsesVerifiedIdentityAndValidMessage(t *testing.T) {
+	store := &fakeProfiles{}
+	server := NewHandler(store, testAuth, &fakeRealtime{})
+	call := func(path, body string, authorized bool) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+		if authorized {
+			r.Header.Set("Authorization", "Bearer good-session")
+		}
+		w := httptest.NewRecorder()
+		server.ServeHTTP(w, r)
+		return w
+	}
+	if w := call("/v1/chats/other/read", `{"messageId":"42"}`, false); w.Code != http.StatusUnauthorized || store.readMessageID != "" {
+		t.Fatalf("unauthenticated read status=%d", w.Code)
+	}
+	for _, body := range []string{`{"messageId":"0"}`, `{"messageId":"bad"}`, `{"messageId":"42","viewerId":"other"}`, `{"messageId":"42"} {}`} {
+		if w := call("/v1/chats/other/read", body, true); w.Code != http.StatusBadRequest {
+			t.Fatalf("invalid read marker %q status=%d", body, w.Code)
+		}
+	}
+	if w := call("/v1/chats/user_from_verified_token/read", `{"messageId":"42"}`, true); w.Code != http.StatusBadRequest {
+		t.Fatalf("self read status=%d", w.Code)
+	}
+	store.err = domain.ErrChatUnavailable
+	if w := call("/v1/chats/other/read", `{"messageId":"42"}`, true); w.Code != http.StatusForbidden {
+		t.Fatalf("unavailable chat status=%d", w.Code)
+	}
+	store.err = nil
+	if w := call("/v1/chats/other/read", `{"messageId":"42"}`, true); w.Code != http.StatusNoContent || store.requestedID != "user_from_verified_token" || store.messageOtherID != "other" || store.readMessageID != "42" {
+		t.Fatalf("read status=%d caller=%q peer=%q message=%q", w.Code, store.requestedID, store.messageOtherID, store.readMessageID)
+	}
+}

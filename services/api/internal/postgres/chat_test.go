@@ -97,6 +97,38 @@ func TestChatHistoryAuthorizationPaginationAndRetries(t *testing.T) {
 	if err != nil || len(page.Messages) != 20 || page.NextCursor == "" || page.Messages[0].Body != "hello 22" {
 		t.Fatalf("first page: %+v %v", page, err)
 	}
+	connections, err := store.ListConnections(ctx, b)
+	if err != nil || len(connections) != 1 || connections[0].UnreadCount != 23 {
+		t.Fatalf("unread messages before opening: %+v %v", connections, err)
+	}
+	if err := store.MarkMessagesRead(ctx, stranger, a, page.Messages[0].ID); !errors.Is(err, domain.ErrChatUnavailable) {
+		t.Fatalf("stranger marked chat read: %v", err)
+	}
+	if err := store.MarkMessagesRead(ctx, b, a, page.Messages[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	connections, err = store.ListConnections(ctx, b)
+	if err != nil || connections[0].UnreadCount != 0 {
+		t.Fatalf("unread messages after opening: %+v %v", connections, err)
+	}
+	newMessage, err := store.SendMessage(ctx, a, b, "after_read", "new arrival")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.MarkMessagesRead(ctx, b, a, first.ID); err != nil {
+		t.Fatal(err)
+	}
+	connections, err = store.ListConnections(ctx, b)
+	if err != nil || connections[0].UnreadCount != 1 {
+		t.Fatalf("stale read marker moved backwards: %+v %v", connections, err)
+	}
+	if err := store.MarkMessagesRead(ctx, b, a, newMessage.ID); err != nil {
+		t.Fatal(err)
+	}
+	connections, err = store.ListConnections(ctx, b)
+	if err != nil || connections[0].UnreadCount != 0 {
+		t.Fatalf("latest message stayed unread: %+v %v", connections, err)
+	}
 	older, err := store.ListMessages(ctx, a, b, page.NextCursor)
 	if err != nil || len(older.Messages) != 3 || older.NextCursor != "" || older.Messages[2].ID != first.ID {
 		t.Fatalf("older page: %+v %v", older, err)

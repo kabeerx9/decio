@@ -45,6 +45,15 @@ CREATE TABLE IF NOT EXISTS direct_messages (
 CREATE INDEX IF NOT EXISTS direct_messages_pair_id_idx ON direct_messages (user_low, user_high, id DESC);
 ALTER TABLE direct_messages ENABLE ROW LEVEL SECURITY;
 
+CREATE TABLE IF NOT EXISTS chat_reads (
+    viewer_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    other_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    last_read_message_id BIGINT NOT NULL REFERENCES direct_messages(id) ON DELETE CASCADE,
+    PRIMARY KEY (viewer_id, other_id),
+    CHECK (viewer_id <> other_id)
+);
+ALTER TABLE chat_reads ENABLE ROW LEVEL SECURITY;
+
 CREATE TABLE IF NOT EXISTS city_posts (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     author_id TEXT NOT NULL REFERENCES profiles(id),

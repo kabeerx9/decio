@@ -4,7 +4,7 @@ import * as Crypto from 'expo-crypto';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { DirectMessage, fetchMessages, sendMessage } from '@/lib/chat-api';
+import { DirectMessage, fetchMessages, markMessagesRead, sendMessage } from '@/lib/chat-api';
 import { fetchConnections } from '@/lib/connections-api';
 import { Profile, SessionExpiredError } from '@/lib/profile-api';
 import { colors, fonts } from '@/theme';
@@ -20,16 +20,17 @@ export function Chats({ apiUrl, userId, getToken, onSessionExpired }: Props) {
   });
   useEffect(() => { if (connections.error instanceof SessionExpiredError) onSessionExpired(); }, [connections.error, onSessionExpired]);
   if (other) return <Conversation apiUrl={apiUrl} userId={userId} other={other} getToken={getToken} onBack={() => setOther(null)} onSessionExpired={onSessionExpired} />;
-  const people = (connections.data ?? []).filter((item) => item.status === 'accepted').map((item) => item.other);
+  const people = (connections.data ?? []).filter((item) => item.status === 'accepted');
   return <View style={styles.page}>
     <View style={styles.heading}><Text style={styles.eyebrow}>YOUR PEOPLE</Text><Text style={styles.title}>Messages</Text><Text style={styles.muted}>A place to pick up the conversation.</Text></View>
     {connections.isPending ? <ActivityIndicator color={colors.blue} style={styles.loading} /> : connections.error ?
       <View style={styles.empty}><Text style={styles.muted}>Could not load conversations.</Text><Pressable onPress={() => void connections.refetch()}><Text style={styles.link}>Try again</Text></Pressable></View> :
       people.length === 0 ? <View style={styles.empty}><Ionicons name="chatbubbles-outline" size={32} color={colors.blue} /><Text style={styles.emptyTitle}>No conversations yet</Text><Text style={styles.muted}>Connect with someone in Discover to start chatting.</Text></View> :
-        <FlatList data={people} keyExtractor={(person) => person.id} contentContainerStyle={styles.list} renderItem={({ item }) =>
-          <Pressable accessibilityRole="button" accessibilityLabel={`Chat with ${item.displayName}`} onPress={() => setOther(item)} style={styles.person}>
-            <View style={styles.avatar}><Text style={styles.avatarText}>{item.displayName.charAt(0).toUpperCase()}</Text></View>
-            <View style={styles.personText}><Text style={styles.personName}>{item.displayName}</Text><Text style={styles.muted}>{item.city}</Text></View>
+        <FlatList data={people} keyExtractor={(item) => item.other.id} contentContainerStyle={styles.list} renderItem={({ item }) =>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Chat with ${item.other.displayName}${item.unreadCount ? `, ${item.unreadCount} unread messages` : ''}`} onPress={() => setOther(item.other)} style={styles.person}>
+            <View style={styles.avatar}><Text style={styles.avatarText}>{item.other.displayName.charAt(0).toUpperCase()}</Text></View>
+            <View style={styles.personText}><Text style={styles.personName}>{item.other.displayName}</Text><Text style={styles.muted}>{item.other.city}</Text></View>
+            {item.unreadCount > 0 && <View style={styles.unreadBadge}><Text style={styles.unreadBadgeText}>{item.unreadCount > 99 ? '99+' : item.unreadCount}</Text></View>}
             <Ionicons name="chevron-forward" size={18} color={colors.muted} />
           </Pressable>} />}
   </View>;
@@ -39,6 +40,7 @@ function Conversation({ apiUrl, userId, other, getToken, onBack, onSessionExpire
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState('');
   const retry = useRef<{ body: string; id: string } | null>(null);
+  const lastMarked = useRef<string | null>(null);
   const history = useInfiniteQuery({
     queryKey: ['messages', userId, other.id],
     initialPageParam: '',
@@ -46,6 +48,18 @@ function Conversation({ apiUrl, userId, other, getToken, onBack, onSessionExpire
     getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
     retry: (failures, error) => !(error instanceof SessionExpiredError) && failures < 1,
   });
+  const newestLoadedId = history.data?.pages[0]?.messages[0]?.id;
+  useEffect(() => {
+    if (!newestLoadedId || newestLoadedId === lastMarked.current) return;
+    lastMarked.current = newestLoadedId;
+    void markMessagesRead(apiUrl, getToken, other.id, newestLoadedId).then(
+      () => queryClient.invalidateQueries({ queryKey: ['connections', userId] }),
+      (error: unknown) => {
+        lastMarked.current = null;
+        if (error instanceof SessionExpiredError) onSessionExpired();
+      },
+    );
+  }, [apiUrl, getToken, newestLoadedId, onSessionExpired, other.id, queryClient, userId]);
   const send = useMutation({
     mutationFn: ({ id, body }: { id: string; body: string }) => sendMessage(apiUrl, getToken, other.id, id, body),
     onSuccess: (_message, sent) => {
@@ -97,4 +111,5 @@ function Conversation({ apiUrl, userId, other, getToken, onBack, onSessionExpire
 
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: colors.paper }, heading: { paddingHorizontal: 24, paddingTop: 32, paddingBottom: 24 }, eyebrow: { color: colors.blue, fontFamily: fonts.medium, fontSize: 10, letterSpacing: 1.5 }, title: { fontFamily: fonts.display, color: colors.ink, fontSize: 38, marginTop: 8 }, muted: { color: colors.muted, fontFamily: fonts.body, fontSize: 13 }, loading: { marginTop: 32 }, empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, padding: 32 }, emptyTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 22 }, link: { color: colors.blue, fontFamily: fonts.medium, fontSize: 13 }, list: { paddingHorizontal: 16 }, person: { minHeight: 76, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 10, borderBottomWidth: 1, borderColor: colors.line }, avatar: { width: 48, height: 48, borderRadius: 16, backgroundColor: colors.paleBlue, alignItems: 'center', justifyContent: 'center' }, avatarSmall: { width: 38, height: 38, borderRadius: 13, backgroundColor: colors.paleBlue, alignItems: 'center', justifyContent: 'center' }, avatarText: { color: colors.blue, fontFamily: fonts.display, fontSize: 20 }, personText: { flex: 1 }, personName: { color: colors.ink, fontFamily: fonts.medium, fontSize: 15 }, conversationHeader: { minHeight: 66, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: colors.line }, back: { padding: 8 }, messages: { padding: 16, flexGrow: 1 }, bubble: { maxWidth: '82%', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 15, marginVertical: 4 }, mine: { alignSelf: 'flex-end', backgroundColor: colors.blue, borderBottomRightRadius: 4 }, theirs: { alignSelf: 'flex-start', backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, borderBottomLeftRadius: 4 }, bubbleText: { color: colors.ink, fontFamily: fonts.body, fontSize: 14, lineHeight: 20 }, mineText: { color: colors.white }, timestamp: { color: colors.muted, fontFamily: fonts.body, fontSize: 10, marginTop: 5, alignSelf: 'flex-end' }, mineTimestamp: { color: colors.paleBlue }, older: { alignItems: 'center', padding: 16 }, emptyConversation: { alignItems: 'center', padding: 30, gap: 7 }, composer: { flexDirection: 'row', alignItems: 'flex-end', gap: 10, padding: 12, borderTopWidth: 1, borderColor: colors.line, backgroundColor: colors.white }, input: { flex: 1, minHeight: 43, maxHeight: 115, borderRadius: 18, backgroundColor: colors.paper, color: colors.ink, fontFamily: fonts.body, fontSize: 14, paddingHorizontal: 14, paddingTop: 11, paddingBottom: 10 }, send: { width: 43, height: 43, borderRadius: 14, backgroundColor: colors.blue, alignItems: 'center', justifyContent: 'center' }, sendDisabled: { opacity: 0.45 }, error: { color: '#B42318', fontFamily: fonts.body, fontSize: 12, paddingHorizontal: 16, paddingBottom: 8, backgroundColor: colors.white },
+  unreadBadge: { minWidth: 22, height: 22, borderRadius: 11, paddingHorizontal: 5, backgroundColor: '#B42318', alignItems: 'center', justifyContent: 'center' }, unreadBadgeText: { color: colors.white, fontFamily: fonts.medium, fontSize: 11 },
 });

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { fetchMessages, parseMessagePage, sendMessage } from './chat-api';
+import { fetchMessages, markMessagesRead, parseMessagePage, sendMessage } from './chat-api';
 import { SessionExpiredError } from './profile-api';
 
 test('loads authenticated, paginated history with string IDs', async () => {
@@ -31,4 +31,15 @@ test('sends a stable retry ID and handles chat authorization', async () => {
 
 test('never sends a message without a session', async () => {
   await assert.rejects(sendMessage('https://api.example', async () => null, 'other', 'id', 'hi', (() => { throw new Error('unexpected fetch'); }) as typeof fetch), SessionExpiredError);
+});
+
+test('marks the newest loaded message as read with the viewer session', async () => {
+  let requested = '';
+  await markMessagesRead('https://api.example/', async () => 'session', 'other/id', '9007199254740993', (async (input, init) => {
+    requested = `${String(input)}|${init?.method}|${new Headers(init?.headers).get('Authorization')}|${init?.body}`;
+    return new Response(null, { status: 204 });
+  }) as typeof fetch);
+  assert.equal(requested, 'https://api.example/v1/chats/other%2Fid/read|POST|Bearer session|{"messageId":"9007199254740993"}');
+  await assert.rejects(markMessagesRead('https://api.example', async () => 'session', 'other', '1', (async () => new Response(null, { status: 403 })) as typeof fetch), /accepted connection/);
+  await assert.rejects(markMessagesRead('https://api.example', async () => null, 'other', '1', (() => { throw new Error('unexpected fetch'); }) as typeof fetch), SessionExpiredError);
 });

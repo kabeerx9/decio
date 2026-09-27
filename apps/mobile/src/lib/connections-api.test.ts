@@ -8,10 +8,18 @@ test('connection list sends the session and preserves incoming state', async () 
   const list = await fetchConnections('http://localhost:8080', async () => 'token', async (url, options) => {
     assert.equal(url, 'http://localhost:8080/v1/connections');
     assert.equal(new Headers(options?.headers).get('Authorization'), 'Bearer token');
-    return new Response(JSON.stringify({ connections: [{ other: { id: 'other', displayName: 'Asha', city: 'Mumbai', bio: '', headline: '', interests: [] }, status: 'incoming' }] }), { status: 200 });
+    return new Response(JSON.stringify({ connections: [{ other: { id: 'other', displayName: 'Asha', city: 'Mumbai', bio: '', headline: '', interests: [] }, status: 'incoming', unreadCount: 0 }] }), { status: 200 });
   });
   assert.equal(list[0].status, 'incoming');
   assert.equal(list[0].other.id, 'other');
+  assert.equal(list[0].unreadCount, 0);
+});
+
+test('connection list keeps unread counts and rejects invalid counts', async () => {
+  const other = { id: 'other', displayName: 'Asha', city: 'Mumbai', bio: '', headline: '', interests: [] };
+  const list = await fetchConnections('http://localhost:8080', async () => 'token', (async () => Response.json({ connections: [{ other, status: 'accepted', unreadCount: 3 }] })) as typeof fetch);
+  assert.equal(list[0].unreadCount, 3);
+  await assert.rejects(fetchConnections('http://localhost:8080', async () => 'token', (async () => Response.json({ connections: [{ other, status: 'accepted', unreadCount: -1 }] })) as typeof fetch), /unexpected/);
 });
 
 test('request and accept target another user with the session', async () => {

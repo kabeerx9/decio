@@ -60,9 +60,16 @@ func (s *Store) ListConnections(ctx context.Context, userID string) ([]domain.Co
 	rows, err := s.pool.Query(ctx, `
 		SELECT p.id, p.display_name, p.city, p.bio, p.headline, p.interests,
 			CASE WHEN c.status = 'accepted' THEN 'accepted'
-			     WHEN c.recipient_id = $1 THEN 'incoming' ELSE 'sent' END
+			     WHEN c.recipient_id = $1 THEN 'incoming' ELSE 'sent' END,
+			COALESCE(unread.count, 0)
 		FROM connections c
 		JOIN profiles p ON p.id = CASE WHEN c.requester_id = $1 THEN c.recipient_id ELSE c.requester_id END
+		LEFT JOIN chat_reads r ON r.viewer_id = $1 AND r.other_id = p.id
+		LEFT JOIN LATERAL (
+			SELECT COUNT(*)::int AS count FROM direct_messages m
+			WHERE c.status = 'accepted' AND m.user_low = c.user_low AND m.user_high = c.user_high
+				AND m.sender_id <> $1 AND m.id > COALESCE(r.last_read_message_id, 0)
+		) unread ON true
 		WHERE c.requester_id = $1 OR c.recipient_id = $1
 		ORDER BY c.created_at DESC, p.id
 	`, userID)
@@ -73,7 +80,7 @@ func (s *Store) ListConnections(ctx context.Context, userID string) ([]domain.Co
 	connections := []domain.Connection{}
 	for rows.Next() {
 		var connection domain.Connection
-		if err := rows.Scan(&connection.Other.ID, &connection.Other.DisplayName, &connection.Other.City, &connection.Other.Bio, &connection.Other.Headline, &connection.Other.Interests, &connection.Status); err != nil {
+		if err := rows.Scan(&connection.Other.ID, &connection.Other.DisplayName, &connection.Other.City, &connection.Other.Bio, &connection.Other.Headline, &connection.Other.Interests, &connection.Status, &connection.UnreadCount); err != nil {
 			return nil, err
 		}
 		connections = append(connections, connection)

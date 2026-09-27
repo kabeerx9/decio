@@ -28,6 +28,7 @@ type fakeProfiles struct {
 	messageClientID     string
 	messageBody         string
 	messageCursor       string
+	readMessageID       string
 	postResult          domain.Post
 	postPage            domain.PostPage
 	postBody            string
@@ -95,6 +96,11 @@ func (f *fakeProfiles) SendMessage(_ context.Context, senderID, otherID, clientM
 func (f *fakeProfiles) ListMessages(_ context.Context, viewerID, otherID, cursor string) (domain.MessagePage, error) {
 	f.requestedID, f.messageOtherID, f.messageCursor = viewerID, otherID, cursor
 	return f.messagePage, f.err
+}
+
+func (f *fakeProfiles) MarkMessagesRead(_ context.Context, viewerID, otherID, messageID string) error {
+	f.requestedID, f.messageOtherID, f.readMessageID = viewerID, otherID, messageID
+	return f.err
 }
 
 func testAuth(next http.Handler) http.Handler {

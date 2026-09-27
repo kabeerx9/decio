@@ -1,6 +1,6 @@
 import { parseProfile, Profile, SessionExpiredError } from './profile-api';
 
-export type Connection = { other: Profile; status: 'incoming' | 'sent' | 'accepted' };
+export type Connection = { other: Profile; status: 'incoming' | 'sent' | 'accepted'; unreadCount: number };
 
 function parseConnections(value: unknown): Connection[] {
   if (typeof value !== 'object' || value === null || !('connections' in value) || !Array.isArray(value.connections)) {
@@ -11,7 +11,11 @@ function parseConnections(value: unknown): Connection[] {
       !['incoming', 'sent', 'accepted'].includes(String(item.status))) {
       throw new Error('The connections response was unexpected. Please try again.');
     }
-    return { other: parseProfile(item.other), status: item.status } as Connection;
+    const unreadCount = 'unreadCount' in item ? item.unreadCount : 0;
+    if (typeof unreadCount !== 'number' || !Number.isSafeInteger(unreadCount) || unreadCount < 0) {
+      throw new Error('The connections response was unexpected. Please try again.');
+    }
+    return { other: parseProfile(item.other), status: item.status, unreadCount } as Connection;
   });
 }
 

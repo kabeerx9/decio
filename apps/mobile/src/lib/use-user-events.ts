@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import * as Ably from 'ably';
 import { useEffect, useRef } from 'react';
+import { AppState } from 'react-native';
 
 import { fetchRealtimeToken, messageChangeOtherUserId } from './realtime-api';
 
@@ -21,6 +22,7 @@ export function useUserEvents(apiUrl: string | undefined, userId: string | null 
       if (closed) return;
       const otherUserId = messageChangeOtherUserId(message.data);
       if (otherUserId) void queryClient.invalidateQueries({ queryKey: ['messages', userId, otherUserId] });
+      invalidateConnections();
     };
     const client = new Ably.Realtime({
       autoConnect: true,
@@ -33,6 +35,7 @@ export function useUserEvents(apiUrl: string | undefined, userId: string | null 
     });
     const channel = client.channels.get(`user:${userId}:events`);
     client.connection.on('connected', refreshAfterReconnect);
+    const appState = AppState.addEventListener('change', (state) => { if (state === 'active') refreshAfterReconnect(); });
     void Promise.all([
       channel.subscribe('connections.changed', invalidateConnections),
       channel.subscribe('messages.changed', invalidateMessages),
@@ -43,6 +46,7 @@ export function useUserEvents(apiUrl: string | undefined, userId: string | null 
       closed = true;
       channel.unsubscribe('connections.changed', invalidateConnections);
       channel.unsubscribe('messages.changed', invalidateMessages);
+      appState.remove();
       client.close();
     };
   }, [apiUrl, userId, queryClient]);

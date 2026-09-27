@@ -21,10 +21,52 @@ var clientMessageIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 type ChatStore interface {
 	SendMessage(ctx context.Context, senderID, otherID, clientMessageID, body string) (domain.DirectMessage, error)
 	ListMessages(ctx context.Context, viewerID, otherID, cursor string) (domain.MessagePage, error)
+	MarkMessagesRead(ctx context.Context, viewerID, otherID, messageID string) error
 }
 
 func registerChatRoutes(mux *http.ServeMux, store ChatStore, realtime Realtime, authenticate Middleware) {
 	chat := service.NewChat(store, realtime)
+	mux.Handle("POST /v1/chats/{id}/read", authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		viewerID, ok := userID(r.Context())
+		if !ok {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		otherID := r.PathValue("id")
+		if !validChatPeer(viewerID, otherID) {
+			http.Error(w, "invalid chat participant", http.StatusBadRequest)
+			return
+		}
+		var input struct {
+			MessageID string `json:"messageId"`
+		}
+		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&input); err != nil {
+			http.Error(w, "invalid read marker JSON", http.StatusBadRequest)
+			return
+		}
+		if err := decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
+			http.Error(w, "expected one read marker", http.StatusBadRequest)
+			return
+		}
+		messageID, err := strconv.ParseInt(input.MessageID, 10, 64)
+		if err != nil || messageID < 1 {
+			http.Error(w, "invalid message ID", http.StatusBadRequest)
+			return
+		}
+		err = store.MarkMessagesRead(r.Context(), viewerID, otherID, input.MessageID)
+		switch {
+		case errors.Is(err, domain.ErrChatUnavailable):
+			http.Error(w, "chat requires an accepted connection and message", http.StatusForbidden)
+		case err != nil:
+			log.Printf("mark messages read: %v", err)
+			http.Error(w, "read marker unavailable", http.StatusInternalServerError)
+		default:
+			w.WriteHeader(http.StatusNoContent)
+		}
+	})))
 	mux.Handle("GET /v1/chats/{id}/messages", authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		viewerID, ok := userID(r.Context())

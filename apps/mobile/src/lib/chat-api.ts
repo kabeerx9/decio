@@ -53,3 +53,16 @@ export async function sendMessage(apiUrl: string, getToken: () => Promise<string
   if (!response.ok) throw new Error('Could not send your message. Please try again.');
   return parseMessage(await response.json());
 }
+
+export async function markMessagesRead(apiUrl: string, getToken: () => Promise<string | null>, otherID: string, messageID: string, request: typeof fetch = fetch): Promise<void> {
+  if (!/^[1-9]\d*$/.test(messageID)) throw new Error('Invalid message ID.');
+  const token = await sessionToken(getToken);
+  const response = await request(`${apiUrl.replace(/\/$/, '')}/v1/chats/${encodeURIComponent(otherID)}/read`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messageId: messageID }),
+  });
+  if (response.status === 401) throw new SessionExpiredError();
+  if (response.status === 403) throw new Error('This chat requires an accepted connection.');
+  if (!response.ok) throw new Error('Could not mark messages as read.');
+}

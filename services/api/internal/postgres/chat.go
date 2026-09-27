@@ -93,3 +93,23 @@ func (s *Store) ListMessages(ctx context.Context, viewerID, otherID, cursor stri
 	}
 	return page, nil
 }
+
+// MarkMessagesRead advances only to a message that belongs to this accepted chat.
+// GREATEST keeps concurrent reads from moving the cursor backwards.
+func (s *Store) MarkMessagesRead(ctx context.Context, viewerID, otherID, messageID string) error {
+	var lastRead int64
+	err := s.pool.QueryRow(ctx, `
+		INSERT INTO chat_reads (viewer_id, other_id, last_read_message_id)
+		SELECT $1, $2, m.id FROM direct_messages m
+		JOIN connections c ON c.user_low = m.user_low AND c.user_high = m.user_high
+		WHERE m.id = $3::bigint AND m.user_low = LEAST($1, $2) AND m.user_high = GREATEST($1, $2)
+			AND c.status = 'accepted'
+		ON CONFLICT (viewer_id, other_id) DO UPDATE
+		SET last_read_message_id = GREATEST(chat_reads.last_read_message_id, EXCLUDED.last_read_message_id)
+		RETURNING last_read_message_id
+	`, viewerID, otherID, messageID).Scan(&lastRead)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.ErrChatUnavailable
+	}
+	return err
+}
