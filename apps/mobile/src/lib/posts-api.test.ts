@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createCityPost, fetchCityPosts, parsePostPage, postPhotoURL } from './posts-api';
+import { createCityPost, createPostReply, fetchCityPosts, fetchPostReplies, parsePostPage, postPhotoURL } from './posts-api';
 import { SessionExpiredError } from './profile-api';
 
 test('city feed uses session and cursor, then validates the page', async () => {
@@ -14,6 +14,25 @@ test('city feed uses session and cursor, then validates the page', async () => {
   assert.equal(page.posts[0].body, 'Hi');
   assert.equal(postPhotoURL('https://api.test/', '22'), 'https://api.test/v1/posts/22/photo');
   assert.throws(() => parsePostPage({ city: 'Mumbai', posts: [{ id: 1 }], nextCursor: '' }));
+});
+
+test('replies use the post URL, cursor, verified session, and JSON body', async () => {
+  const getRequest: typeof fetch = async (input, init) => {
+    assert.equal(input, 'https://api.test/v1/posts/22/replies?cursor=3');
+    assert.equal(new Headers(init?.headers).get('Authorization'), 'Bearer token');
+    return Response.json({ replies: [{ id: '4', postId: '22', authorId: 'a', authorName: 'Asha', body: 'Hello', createdAt: '2026-09-27T00:00:00Z' }], nextCursor: '' });
+  };
+  assert.equal((await fetchPostReplies('https://api.test/', async () => 'token', '22', '3', getRequest)).replies[0].body, 'Hello');
+  const postRequest: typeof fetch = async (input, init) => {
+    assert.equal(input, 'https://api.test/v1/posts/22/replies');
+    assert.equal(new Headers(init?.headers).get('Authorization'), 'Bearer token');
+    assert.deepEqual(JSON.parse(String(init?.body)), { body: 'Hello' });
+    return Response.json({ id: '4', postId: '22', authorId: 'a', authorName: 'Asha', body: 'Hello', createdAt: '2026-09-27T00:00:00Z' }, { status: 201 });
+  };
+  await createPostReply('https://api.test/', async () => 'token', '22', ' Hello ', postRequest);
+  const noNetwork: typeof fetch = async () => { throw new Error('network reached'); };
+  await assert.rejects(createPostReply('https://api.test', async () => null, '22', 'Hello', noNetwork), SessionExpiredError);
+  await assert.rejects(createPostReply('https://api.test', async () => 'token', '22', ' ', noNetwork), /1–1000/);
 });
 
 test('post creation sends multipart with text and bearer token', async () => {

@@ -35,6 +35,20 @@ type fakeProfiles struct {
 	postPhoto           []byte
 	postKind            string
 	postCursor          string
+	replyResult         domain.PostReply
+	replyPage           domain.ReplyPage
+	replyBody           string
+	replyCursor         string
+}
+
+func (f *fakeProfiles) CreateReply(_ context.Context, id, postID, body string) (domain.PostReply, error) {
+	f.requestedID, f.publicID, f.replyBody = id, postID, body
+	return f.replyResult, f.err
+}
+
+func (f *fakeProfiles) ListReplies(_ context.Context, id, postID, cursor string) (domain.ReplyPage, error) {
+	f.requestedID, f.publicID, f.replyCursor = id, postID, cursor
+	return f.replyPage, f.err
 }
 
 func (f *fakeProfiles) CreatePost(_ context.Context, id, body string, photo []byte, kind string) (domain.Post, error) {

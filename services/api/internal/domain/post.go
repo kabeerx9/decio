@@ -22,3 +22,17 @@ type PostPage struct {
 	Posts      []Post `json:"posts"`
 	NextCursor string `json:"nextCursor"`
 }
+
+type PostReply struct {
+	ID         string    `json:"id"`
+	PostID     string    `json:"postId"`
+	AuthorID   string    `json:"authorId"`
+	AuthorName string    `json:"authorName"`
+	Body       string    `json:"body"`
+	CreatedAt  time.Time `json:"createdAt"`
+}
+
+type ReplyPage struct {
+	Replies    []PostReply `json:"replies"`
+	NextCursor string      `json:"nextCursor"`
+}

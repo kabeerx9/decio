@@ -19,6 +19,8 @@ func TestPostRoutesRequireSession(t *testing.T) {
 		{http.MethodPost, "/v1/posts"},
 		{http.MethodGet, "/v1/posts"},
 		{http.MethodGet, "/v1/posts/1/photo"},
+		{http.MethodGet, "/v1/posts/1/replies"},
+		{http.MethodPost, "/v1/posts/1/replies"},
 	} {
 		request := httptest.NewRequest(endpoint.method, endpoint.path, nil)
 		response := httptest.NewRecorder()
@@ -26,6 +28,41 @@ func TestPostRoutesRequireSession(t *testing.T) {
 		if response.Code != http.StatusUnauthorized {
 			t.Fatalf("%s %s without session: status=%d", endpoint.method, endpoint.path, response.Code)
 		}
+	}
+}
+
+func TestReplyRoutesValidateAndUseVerifiedViewer(t *testing.T) {
+	store := &fakeProfiles{replyResult: domain.PostReply{ID: "7"}, replyPage: domain.ReplyPage{Replies: []domain.PostReply{}}}
+	server := NewHandler(store, testAuth, nil)
+	request := httptest.NewRequest(http.MethodPost, "/v1/posts/23/replies", strings.NewReader(`{"body":"  Hello neighbor  "}`))
+	request.Header.Set("Authorization", "Bearer good-session")
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, request)
+	if response.Code != http.StatusCreated || store.requestedID != "user_from_verified_token" || store.publicID != "23" || store.replyBody != "Hello neighbor" {
+		t.Fatalf("create reply: status=%d viewer=%q post=%q body=%q", response.Code, store.requestedID, store.publicID, store.replyBody)
+	}
+	for _, body := range []string{`{"body":" "}`, `{"body":"hello","extra":1}`, `{"body":"hello"}{}`, `{"body":"` + strings.Repeat("a", 1001) + `"}`} {
+		store.replyBody = ""
+		request = httptest.NewRequest(http.MethodPost, "/v1/posts/23/replies", strings.NewReader(body))
+		request.Header.Set("Authorization", "Bearer good-session")
+		response = httptest.NewRecorder()
+		server.ServeHTTP(response, request)
+		if response.Code != http.StatusBadRequest || store.replyBody != "" {
+			t.Fatalf("invalid reply: status=%d body=%q", response.Code, store.replyBody)
+		}
+	}
+	request = httptest.NewRequest(http.MethodGet, "/v1/posts/23/replies?cursor=4", nil)
+	request.Header.Set("Authorization", "Bearer good-session")
+	response = httptest.NewRecorder()
+	server.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || store.requestedID != "user_from_verified_token" || store.publicID != "23" || store.replyCursor != "4" {
+		t.Fatalf("list replies: status=%d viewer=%q post=%q cursor=%q", response.Code, store.requestedID, store.publicID, store.replyCursor)
+	}
+	store.err = domain.ErrPostNotFound
+	response = httptest.NewRecorder()
+	server.ServeHTTP(response, request)
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("hidden post: status=%d", response.Code)
 	}
 }
 

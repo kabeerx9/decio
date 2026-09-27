@@ -22,9 +22,83 @@ type PostStore interface {
 	CreatePost(ctx context.Context, authorID, body string, photo []byte, photoType string) (domain.Post, error)
 	ListPosts(ctx context.Context, viewerID, cursor string) (domain.PostPage, error)
 	PostPhoto(ctx context.Context, viewerID, postID string) ([]byte, string, error)
+	CreateReply(ctx context.Context, authorID, postID, body string) (domain.PostReply, error)
+	ListReplies(ctx context.Context, viewerID, postID, cursor string) (domain.ReplyPage, error)
 }
 
 func registerPostRoutes(mux *http.ServeMux, store PostStore, authenticate Middleware) {
+	mux.Handle("POST /v1/posts/{id}/replies", authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		id, ok := userID(r.Context())
+		if !ok {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		postID := r.PathValue("id")
+		if !validPostID(postID) {
+			http.Error(w, "invalid post ID", http.StatusBadRequest)
+			return
+		}
+		var input struct {
+			Body string `json:"body"`
+		}
+		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&input); err != nil {
+			http.Error(w, "invalid reply JSON", http.StatusBadRequest)
+			return
+		}
+		if err := decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
+			http.Error(w, "expected one reply object", http.StatusBadRequest)
+			return
+		}
+		body := strings.TrimSpace(input.Body)
+		if n := utf8.RuneCountInString(body); n < 1 || n > 1000 || !utf8.ValidString(body) {
+			http.Error(w, "reply text must be 1–1000 characters", http.StatusBadRequest)
+			return
+		}
+		reply, err := store.CreateReply(r.Context(), id, postID, body)
+		switch {
+		case errors.Is(err, domain.ErrPostNotFound):
+			http.Error(w, "post not found", http.StatusNotFound)
+		case err != nil:
+			log.Printf("create reply: %v", err)
+			http.Error(w, "reply unavailable", http.StatusInternalServerError)
+		default:
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(reply)
+		}
+	})))
+	mux.Handle("GET /v1/posts/{id}/replies", authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		id, ok := userID(r.Context())
+		if !ok {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		postID := r.PathValue("id")
+		if !validPostID(postID) {
+			http.Error(w, "invalid post ID", http.StatusBadRequest)
+			return
+		}
+		cursor := r.URL.Query().Get("cursor")
+		if cursor != "" && !validPostID(cursor) {
+			http.Error(w, "invalid cursor", http.StatusBadRequest)
+			return
+		}
+		page, err := store.ListReplies(r.Context(), id, postID, cursor)
+		switch {
+		case errors.Is(err, domain.ErrPostNotFound):
+			http.Error(w, "post not found", http.StatusNotFound)
+		case err != nil:
+			log.Printf("list replies: %v", err)
+			http.Error(w, "replies unavailable", http.StatusInternalServerError)
+		default:
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(page)
+		}
+	})))
 	mux.Handle("POST /v1/posts", authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		id, ok := userID(r.Context())
@@ -131,6 +205,11 @@ func registerPostRoutes(mux *http.ServeMux, store PostStore, authenticate Middle
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		_, _ = w.Write(photo)
 	})))
+}
+
+func validPostID(id string) bool {
+	value, err := strconv.ParseInt(id, 10, 64)
+	return err == nil && value > 0
 }
 
 // Re-encoding strips metadata and fixes the stored media type to decoded pixels.

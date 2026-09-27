@@ -28,6 +28,7 @@ func TestCityPostsScopePaginationAndPhoto(t *testing.T) {
 	t.Cleanup(func() {
 		cleanup, stop := context.WithTimeout(context.Background(), 5*time.Second)
 		defer stop()
+		_, _ = store.pool.Exec(cleanup, `DELETE FROM post_replies WHERE author_id = ANY($1)`, []string{author, neighbor, outsider, blank})
 		_, _ = store.pool.Exec(cleanup, `DELETE FROM city_posts WHERE author_id = ANY($1)`, []string{author, neighbor, outsider, blank})
 		_, _ = store.pool.Exec(cleanup, `DELETE FROM profiles WHERE id = ANY($1)`, []string{author, neighbor, outsider, blank})
 	})
@@ -74,6 +75,33 @@ func TestCityPostsScopePaginationAndPhoto(t *testing.T) {
 		}
 	}
 	photoID := second.Posts[1].ID
+	reply, err := store.CreateReply(ctx, neighbor, photoID, "Hello from Mumbai")
+	if err != nil || reply.PostID != photoID || reply.AuthorID != neighbor || reply.Body != "Hello from Mumbai" {
+		t.Fatalf("create reply: %+v %v", reply, err)
+	}
+	replies, err := store.ListReplies(ctx, author, photoID, "")
+	if err != nil || len(replies.Replies) != 1 || replies.Replies[0].ID != reply.ID || replies.NextCursor != "" {
+		t.Fatalf("list replies: %+v %v", replies, err)
+	}
+	for i := 0; i < 31; i++ {
+		if _, err := store.CreateReply(ctx, author, photoID, fmt.Sprintf("reply %d", i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	firstReplies, err := store.ListReplies(ctx, neighbor, photoID, "")
+	if err != nil || len(firstReplies.Replies) != 30 || firstReplies.NextCursor == "" || firstReplies.Replies[0].ID != reply.ID {
+		t.Fatalf("first reply page: %+v %v", firstReplies, err)
+	}
+	lastReplies, err := store.ListReplies(ctx, neighbor, photoID, firstReplies.NextCursor)
+	if err != nil || len(lastReplies.Replies) != 2 || lastReplies.NextCursor != "" || lastReplies.Replies[0].Body != "reply 29" {
+		t.Fatalf("last reply page: %+v %v", lastReplies, err)
+	}
+	if _, err := store.CreateReply(ctx, outsider, photoID, "Cross-city"); !errors.Is(err, domain.ErrPostNotFound) {
+		t.Fatalf("cross-city reply write: %v", err)
+	}
+	if _, err := store.ListReplies(ctx, outsider, photoID, ""); !errors.Is(err, domain.ErrPostNotFound) {
+		t.Fatalf("cross-city reply read: %v", err)
+	}
 	data, kind, err := store.PostPhoto(ctx, neighbor, photoID)
 	if err != nil || string(data) != "image data" || kind != "image/jpeg" {
 		t.Fatalf("same-city photo: %q %q %v", data, kind, err)
@@ -89,5 +117,8 @@ func TestCityPostsScopePaginationAndPhoto(t *testing.T) {
 	}
 	if _, _, err := store.PostPhoto(ctx, neighbor, photoID); !errors.Is(err, domain.ErrPostNotFound) {
 		t.Fatalf("moved-city photo: %v", err)
+	}
+	if _, err := store.ListReplies(ctx, neighbor, photoID, ""); !errors.Is(err, domain.ErrPostNotFound) {
+		t.Fatalf("moved-city replies: %v", err)
 	}
 }

@@ -82,3 +82,73 @@ func (s *Store) PostPhoto(ctx context.Context, viewerID, postID string) ([]byte,
 	}
 	return photo, kind, err
 }
+
+func (s *Store) CreateReply(ctx context.Context, authorID, postID, body string) (domain.PostReply, error) {
+	var reply domain.PostReply
+	err := s.pool.QueryRow(ctx, `
+		WITH inserted AS (
+			INSERT INTO post_replies (post_id, author_id, body)
+			SELECT cp.id, author.id, $3 FROM city_posts cp
+			JOIN profiles author ON author.id = $1 AND author.city <> '' AND author.display_name <> ''
+				AND lower(author.city) = lower(cp.city)
+			WHERE cp.id = $2
+			RETURNING id, post_id, author_id, body, created_at
+		)
+		SELECT i.id, i.post_id, i.author_id, author.display_name, i.body, i.created_at
+		FROM inserted i JOIN profiles author ON author.id = i.author_id
+	`, authorID, postID, body).Scan(&reply.ID, &reply.PostID, &reply.AuthorID, &reply.AuthorName, &reply.Body, &reply.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.PostReply{}, domain.ErrPostNotFound
+	}
+	return reply, err
+}
+
+func (s *Store) ListReplies(ctx context.Context, viewerID, postID, cursor string) (domain.ReplyPage, error) {
+	page := domain.ReplyPage{Replies: []domain.PostReply{}}
+	var after int64
+	if cursor != "" {
+		after, _ = strconv.ParseInt(cursor, 10, 64)
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT r.id, r.post_id, r.author_id, p.display_name, r.body, r.created_at
+		FROM post_replies r JOIN profiles p ON p.id = r.author_id
+		JOIN city_posts cp ON cp.id = r.post_id
+		JOIN profiles viewer ON viewer.id = $1 AND viewer.city <> '' AND lower(viewer.city) = lower(cp.city)
+		WHERE r.post_id = $2 AND r.id > $3
+		ORDER BY r.id ASC LIMIT 31
+	`, viewerID, postID, after)
+	if err != nil {
+		return page, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var reply domain.PostReply
+		if err := rows.Scan(&reply.ID, &reply.PostID, &reply.AuthorID, &reply.AuthorName, &reply.Body, &reply.CreatedAt); err != nil {
+			return page, err
+		}
+		page.Replies = append(page.Replies, reply)
+	}
+	if err := rows.Err(); err != nil {
+		return page, err
+	}
+	rows.Close()
+	// An empty page is valid only while this post remains visible to the viewer.
+	if len(page.Replies) == 0 {
+		var visible bool
+		if err := s.pool.QueryRow(ctx, `
+			SELECT EXISTS (SELECT 1 FROM city_posts cp
+			JOIN profiles viewer ON viewer.id = $1 AND viewer.city <> '' AND lower(viewer.city) = lower(cp.city)
+			WHERE cp.id = $2)
+		`, viewerID, postID).Scan(&visible); err != nil {
+			return page, err
+		}
+		if !visible {
+			return page, domain.ErrPostNotFound
+		}
+	}
+	if len(page.Replies) > 30 {
+		page.Replies = page.Replies[:30]
+		page.NextCursor = page.Replies[29].ID
+	}
+	return page, nil
+}

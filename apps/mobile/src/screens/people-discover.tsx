@@ -96,6 +96,7 @@ export function PeopleDiscover({ apiUrl, userId, city, getToken, onMyProfile, on
     </View>
     <View style={styles.searchSection}>
       <View style={styles.searchBox}><Ionicons name="search" size={21} color={colors.accent} /><TextInput accessibilityLabel="Search people" placeholder="Search name, city, or headline" placeholderTextColor={colors.muted} value={draft} onChangeText={setDraft} autoCorrect={false} style={styles.searchInput} returnKeyType="search" /></View>
+      <Text style={styles.searchHint}>Search anyone on Decio, then tap Connect to send a request.</Text>
     </View>
     {!city && <Pressable accessibilityRole="button" onPress={onMyProfile} style={styles.profilePrompt}><Text style={styles.promptText}>Add your city to your profile</Text><Ionicons name="arrow-forward" size={17} color={colors.accent} /></Pressable>}
     {!draft.trim() && (connections.isPending || connections.error || !!connections.data?.length) && <View style={styles.connectionsSection}>
@@ -115,12 +116,17 @@ export function PeopleDiscover({ apiUrl, userId, city, getToken, onMyProfile, on
       results.length === 0 ? <Text style={styles.message}>{query ? 'No people match this search.' : allPeople.length ? 'You have met everyone here so far. Check back soon.' : 'No people yet. Check back soon.'}</Text> :
           <View style={styles.listSection}>
             <Text style={styles.sectionTitle}>{query ? 'Search results' : 'People to meet'}</Text>
-            <View style={styles.results}>{results.map((person) =>
-              <Pressable key={person.id} accessibilityRole="button" accessibilityLabel={`Open ${person.displayName}'s profile`} onPress={() => openProfile(person.id)} style={styles.person}>
+            <View style={styles.results}>{results.map((person) => {
+              const connection = connections.data?.find((item) => item.other.id === person.id);
+              return <View key={person.id} style={styles.person}>
+              <Pressable accessibilityRole="button" accessibilityLabel={`Open ${person.displayName}'s profile`} onPress={() => openProfile(person.id)} style={styles.personProfile}>
                 <View style={styles.smallAvatar}><Text style={styles.smallAvatarText}>{person.displayName.charAt(0).toUpperCase()}</Text></View>
                 <View style={styles.personText}><Text style={styles.personName}>{person.displayName}</Text><Text style={styles.secondary} numberOfLines={1}>{[person.headline, person.city].filter(Boolean).join(' · ')}</Text></View>
-                <Ionicons name="chevron-forward" size={18} color={colors.muted} />
-              </Pressable>)}</View>
+              </Pressable>
+              {connection?.status === 'accepted' || connection?.status === 'sent' ? <Text style={styles.personStatus}>{connection.status === 'accepted' ? 'Connected' : 'Sent'}</Text> :
+                <Pressable accessibilityRole="button" accessibilityLabel={`${connection?.status === 'incoming' ? 'Accept' : 'Connect with'} ${person.displayName}`} disabled={connectionAction.isPending || connections.isPending || !!connections.error} onPress={() => connectionAction.mutate({ kind: connection?.status === 'incoming' ? 'accept' : 'request', id: person.id })} style={[styles.connectButton, (connectionAction.isPending || connections.isPending || !!connections.error) && styles.connectDisabled]}><Text style={styles.connectText}>{connection?.status === 'incoming' ? 'Accept' : 'Connect'}</Text></Pressable>}
+              </View>})}</View>
+            {!!connectionAction.error && <Text accessibilityRole="alert" style={styles.actionError}>{connectionAction.error.message}</Text>}
           </View>}
     {people.hasNextPage && <Pressable accessibilityRole="button" disabled={people.isFetchingNextPage} onPress={() => void people.fetchNextPage()} style={styles.more}><Text style={styles.action}>{people.isFetchingNextPage ? 'Loading…' : 'Load more'}</Text></Pressable>}
   </ScrollView>;
@@ -135,6 +141,7 @@ const styles = StyleSheet.create({
   secondary: { fontFamily: fonts.body, fontSize: 13, color: colors.muted, marginTop: 4 },
   searchBox: { borderWidth: 1, borderColor: colors.line, borderRadius: 18, backgroundColor: colors.white, minHeight: 58, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 11 },
   searchInput: { flex: 1, fontFamily: fonts.body, color: colors.ink, fontSize: 15, paddingVertical: 10 },
+  searchHint: { color: colors.muted, fontFamily: fonts.body, fontSize: 12, marginTop: 8 },
   profilePrompt: { marginTop: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12 },
   promptText: { fontFamily: fonts.medium, color: colors.accent, fontSize: 13 },
   connectionsSection: { marginTop: 28 },
@@ -155,7 +162,11 @@ const styles = StyleSheet.create({
   sectionTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 23, marginBottom: 10 },
   listSection: { marginTop: 32 },
   results: { borderTopWidth: 1, borderColor: colors.line },
-  person: { flexDirection: 'row', alignItems: 'center', minHeight: 72, borderBottomWidth: 1, borderColor: colors.line, gap: 12 },
+  person: { flexDirection: 'row', alignItems: 'center', minHeight: 72, borderBottomWidth: 1, borderColor: colors.line, gap: 8 },
+  personProfile: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
+  connectButton: { minHeight: 38, paddingHorizontal: 13, borderRadius: 12, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
+  connectDisabled: { opacity: 0.5 }, connectText: { color: colors.white, fontFamily: fonts.medium, fontSize: 12 },
+  personStatus: { color: colors.muted, fontFamily: fonts.medium, fontSize: 12 },
   smallAvatar: { width: 44, height: 44, borderRadius: 16, backgroundColor: colors.lilac, alignItems: 'center', justifyContent: 'center' },
   smallAvatarText: { color: colors.ink, fontFamily: fonts.medium, fontSize: 18 },
   personText: { flex: 1 }, personName: { color: colors.ink, fontFamily: fonts.medium, fontSize: 15 },

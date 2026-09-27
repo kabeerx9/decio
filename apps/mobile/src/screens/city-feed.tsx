@@ -7,8 +7,9 @@ import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { createCityPost, fetchCityPosts, PickedPhoto, postPhotoURL } from '@/lib/posts-api';
+import { CityPost, createCityPost, fetchCityPosts, PickedPhoto, postPhotoURL } from '@/lib/posts-api';
 import { SessionExpiredError } from '@/lib/profile-api';
+import { PostReplies } from '@/screens/post-replies';
 import { colors, fonts } from '@/theme';
 
 type Props = {
@@ -19,6 +20,7 @@ type Props = {
 export function CityFeed({ apiUrl, userId, city, getToken, onMyProfile, onSessionExpired }: Props) {
   const [draft, setDraft] = useState('');
   const [composing, setComposing] = useState(false);
+  const [selectedPost, setSelectedPost] = useState<CityPost | null>(null);
   const [photo, setPhoto] = useState<PickedPhoto | undefined>();
   const [pickerError, setPickerError] = useState('');
   const [imageToken, setImageToken] = useState<string | null>(null);
@@ -63,6 +65,7 @@ export function CityFeed({ apiUrl, userId, city, getToken, onMyProfile, onSessio
     }
   };
   const posts = feed.data?.pages.flatMap((page) => page.posts) ?? [];
+  if (selectedPost) return <PostReplies apiUrl={apiUrl} userId={userId} post={selectedPost} imageToken={imageToken} getToken={getToken} onBack={() => setSelectedPost(null)} onSessionExpired={onSessionExpired} />;
   return <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
     <View style={styles.intro}><Text style={styles.title}>{city || 'Your city'} today</Text><Text style={styles.subtitle}>Notes and moments from people nearby.</Text></View>
     {!city ? <View style={styles.empty}><Text style={styles.emptyTitle}>Add your city first</Text><Text style={styles.muted}>Your feed follows the city on your profile.</Text><Pressable accessibilityRole="button" onPress={onMyProfile} style={styles.button}><Text style={styles.buttonText}>Go to profile</Text></Pressable></View> : <>
@@ -80,6 +83,7 @@ export function CityFeed({ apiUrl, userId, city, getToken, onMyProfile, onSessio
         <View style={styles.authorRow}><View style={styles.avatar}><Text style={styles.avatarText}>{post.authorName.charAt(0).toUpperCase()}</Text></View><View style={styles.authorDetails}><Text style={styles.author}>{post.authorName}</Text><Text style={styles.meta}>{new Date(post.createdAt).toLocaleDateString()} · {post.city}</Text></View></View>
         <Text style={styles.body}>{post.body}</Text>
         {post.hasPhoto && imageToken && <Image source={{ uri: postPhotoURL(apiUrl, post.id), headers: { Authorization: `Bearer ${imageToken}` } }} style={styles.postImage} contentFit="cover" accessibilityLabel={`Photo by ${post.authorName}`} />}
+        <Pressable accessibilityRole="button" accessibilityLabel={`View replies to ${post.authorName}'s post`} onPress={() => setSelectedPost(post)} style={styles.replyAction}><Ionicons name="chatbubble-outline" size={18} color={colors.accent} /><Text style={styles.replyActionText}>Reply</Text></Pressable>
       </View>)}
       {feed.hasNextPage && <Pressable accessibilityRole="button" disabled={feed.isFetchingNextPage} onPress={() => void feed.fetchNextPage()} style={styles.more}><Text style={styles.retry}>{feed.isFetchingNextPage ? 'Loading…' : 'Load more'}</Text></Pressable>}
     </>}
@@ -92,4 +96,5 @@ const styles = StyleSheet.create({
   composer: { padding: 18, borderRadius: 19, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line }, composeHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, sectionTitle: { fontFamily: fonts.display, fontSize: 21, color: colors.ink }, input: { minHeight: 106, color: colors.ink, fontFamily: fonts.body, fontSize: 15, textAlignVertical: 'top', marginTop: 15 }, composeActions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }, photoButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 10 }, photoText: { color: colors.accent, fontFamily: fonts.medium, fontSize: 13 }, button: { backgroundColor: colors.accent, borderRadius: 12, minHeight: 42, paddingHorizontal: 18, alignItems: 'center', justifyContent: 'center' }, disabled: { opacity: 0.5 }, buttonText: { color: colors.white, fontFamily: fonts.medium, fontSize: 14 }, preview: { width: 100, height: 100, marginTop: 10 }, previewImage: { width: 100, height: 100, borderRadius: 9 }, remove: { position: 'absolute', right: 4, top: 4, backgroundColor: colors.ink, borderRadius: 20, padding: 3 },
   feedHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 30, marginBottom: 15 }, card: { backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, borderRadius: 18, padding: 17, marginBottom: 12 }, authorRow: { flexDirection: 'row', alignItems: 'center', gap: 10 }, avatar: { width: 40, height: 40, borderRadius: 14, backgroundColor: colors.lilac, alignItems: 'center', justifyContent: 'center' }, avatarText: { fontFamily: fonts.medium, fontSize: 17, color: colors.ink }, authorDetails: { flex: 1 }, author: { fontFamily: fonts.medium, color: colors.ink, fontSize: 14 }, meta: { fontFamily: fonts.body, color: colors.muted, fontSize: 11, marginTop: 2 }, body: { fontFamily: fonts.body, color: colors.ink, fontSize: 15, lineHeight: 22, marginTop: 15 }, postImage: { width: '100%', height: 220, borderRadius: 12, marginTop: 14 },
   empty: { padding: 24, backgroundColor: colors.white, borderRadius: 16, borderWidth: 1, borderColor: colors.line, alignItems: 'flex-start', gap: 8 }, emptyTitle: { fontFamily: fonts.display, fontSize: 19, color: colors.ink }, muted: { fontFamily: fonts.body, fontSize: 13, color: colors.muted }, error: { fontFamily: fonts.body, fontSize: 13, color: '#B42318', marginTop: 10 }, retry: { fontFamily: fonts.medium, color: colors.accent, fontSize: 14 }, loading: { marginTop: 30 }, more: { alignItems: 'center', padding: 18 },
+  replyAction: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 7, minHeight: 38, marginTop: 12 }, replyActionText: { color: colors.accent, fontFamily: fonts.medium, fontSize: 13 },
 });
