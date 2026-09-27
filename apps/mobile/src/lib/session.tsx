@@ -1,9 +1,10 @@
 import { createContext, ReactNode, useContext, useEffect } from 'react';
 
+import { GetToken } from './http';
 import { Profile, SessionExpiredError } from './profile-api';
 
 export type Session = {
-  apiUrl: string; userId: string; getToken: () => Promise<string | null>;
+  apiUrl: string; userId: string; getToken: GetToken;
   profile: Profile; signOutLocal: () => void;
 };
 

@@ -1,3 +1,5 @@
+import { GetToken, retryOn401 } from './http';
+
 export type ProfileInput = { displayName: string; city: string; bio: string; headline: string; interests: string[] };
 export type Profile = ProfileInput & { id: string; imageUrl: string; onboardingComplete: boolean };
 
@@ -19,10 +21,10 @@ export function parseProfile(value: unknown): Profile {
   return { ...value, imageUrl: 'imageUrl' in value ? value.imageUrl : '', onboardingComplete: 'onboardingComplete' in value ? value.onboardingComplete : false } as Profile;
 }
 
-export async function completeOnboarding(apiUrl: string, getToken: () => Promise<string | null>, request: typeof fetch = fetch): Promise<Profile> {
+export async function completeOnboarding(apiUrl: string, getToken: GetToken, request: typeof fetch = fetch): Promise<Profile> {
   const token = await getToken();
   if (!token) throw new SessionExpiredError();
-  const response = await request(`${apiUrl.replace(/\/$/, '')}/v1/me/onboarding/complete`, {
+  const response = await retryOn401(getToken, request)(`${apiUrl.replace(/\/$/, '')}/v1/me/onboarding/complete`, {
     method: 'POST', headers: { Authorization: `Bearer ${token}` },
   });
   if (response.status === 401 || response.status === 403) throw new SessionExpiredError();
@@ -31,10 +33,10 @@ export async function completeOnboarding(apiUrl: string, getToken: () => Promise
   return parseProfile(await response.json());
 }
 
-export async function syncProfileImage(apiUrl: string, getToken: () => Promise<string | null>, request: typeof fetch = fetch): Promise<Profile> {
+export async function syncProfileImage(apiUrl: string, getToken: GetToken, request: typeof fetch = fetch): Promise<Profile> {
   const token = await getToken();
   if (!token) throw new SessionExpiredError();
-  const response = await request(`${apiUrl.replace(/\/$/, '')}/v1/me/image/sync`, {
+  const response = await retryOn401(getToken, request)(`${apiUrl.replace(/\/$/, '')}/v1/me/image/sync`, {
     method: 'POST', headers: { Authorization: `Bearer ${token}` },
   });
   if (response.status === 401 || response.status === 403) throw new SessionExpiredError();
@@ -60,22 +62,22 @@ export function validateProfileInput(input: ProfileInput): string | null {
   return null;
 }
 
-export async function fetchMyProfile(apiUrl: string, getToken: () => Promise<string | null>, request: typeof fetch = fetch): Promise<Profile> {
+export async function fetchMyProfile(apiUrl: string, getToken: GetToken, request: typeof fetch = fetch): Promise<Profile> {
   const token = await getToken();
   if (!token) throw new SessionExpiredError();
-  const response = await request(`${apiUrl.replace(/\/$/, '')}/v1/me`, { headers: { Authorization: `Bearer ${token}` } });
+  const response = await retryOn401(getToken, request)(`${apiUrl.replace(/\/$/, '')}/v1/me`, { headers: { Authorization: `Bearer ${token}` } });
   if (response.status === 401 || response.status === 403) throw new SessionExpiredError();
   if (!response.ok) throw new Error('Your profile is unavailable right now. Please try again.');
   return parseProfile(await response.json());
 }
 
-export async function saveMyProfile(apiUrl: string, getToken: () => Promise<string | null>, input: ProfileInput, request: typeof fetch = fetch): Promise<Profile> {
+export async function saveMyProfile(apiUrl: string, getToken: GetToken, input: ProfileInput, request: typeof fetch = fetch): Promise<Profile> {
   const normalized = normalizeProfileInput(input);
   const validation = validateProfileInput(normalized);
   if (validation) throw new Error(validation);
   const token = await getToken();
   if (!token) throw new SessionExpiredError();
-  const response = await request(`${apiUrl.replace(/\/$/, '')}/v1/me`, {
+  const response = await retryOn401(getToken, request)(`${apiUrl.replace(/\/$/, '')}/v1/me`, {
     method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(normalized),
   });
   if (response.status === 401 || response.status === 403) throw new SessionExpiredError();

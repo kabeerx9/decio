@@ -1,4 +1,5 @@
 import { parseProfile, Profile, SessionExpiredError } from './profile-api';
+import { GetToken, retryOn401 } from './http';
 
 export type Connection = { other: Profile; status: 'incoming' | 'sent' | 'accepted'; unreadCount: number };
 
@@ -19,23 +20,23 @@ function parseConnections(value: unknown): Connection[] {
   });
 }
 
-async function sessionToken(getToken: () => Promise<string | null>): Promise<string> {
+async function sessionToken(getToken: GetToken): Promise<string> {
   const token = await getToken();
   if (!token) throw new SessionExpiredError();
   return token;
 }
 
-export async function fetchConnections(apiUrl: string, getToken: () => Promise<string | null>, request: typeof fetch = fetch): Promise<Connection[]> {
+export async function fetchConnections(apiUrl: string, getToken: GetToken, request: typeof fetch = fetch): Promise<Connection[]> {
   const token = await sessionToken(getToken);
-  const response = await request(`${apiUrl.replace(/\/$/, '')}/v1/connections`, { headers: { Authorization: `Bearer ${token}` } });
+  const response = await retryOn401(getToken, request)(`${apiUrl.replace(/\/$/, '')}/v1/connections`, { headers: { Authorization: `Bearer ${token}` } });
   if (response.status === 401 || response.status === 403) throw new SessionExpiredError();
   if (!response.ok) throw new Error('Could not load connections. Please try again.');
   return parseConnections(await response.json());
 }
 
-export async function requestConnection(apiUrl: string, getToken: () => Promise<string | null>, userID: string, request: typeof fetch = fetch): Promise<void> {
+export async function requestConnection(apiUrl: string, getToken: GetToken, userID: string, request: typeof fetch = fetch): Promise<void> {
   const token = await sessionToken(getToken);
-  const response = await request(`${apiUrl.replace(/\/$/, '')}/v1/connections`, {
+  const response = await retryOn401(getToken, request)(`${apiUrl.replace(/\/$/, '')}/v1/connections`, {
     method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: userID }),
   });
   if (response.status === 401 || response.status === 403) throw new SessionExpiredError();
@@ -45,9 +46,9 @@ export async function requestConnection(apiUrl: string, getToken: () => Promise<
   if (!response.ok) throw new Error('Could not send the request. Please try again.');
 }
 
-export async function acceptConnection(apiUrl: string, getToken: () => Promise<string | null>, requesterID: string, request: typeof fetch = fetch): Promise<void> {
+export async function acceptConnection(apiUrl: string, getToken: GetToken, requesterID: string, request: typeof fetch = fetch): Promise<void> {
   const token = await sessionToken(getToken);
-  const response = await request(`${apiUrl.replace(/\/$/, '')}/v1/connections/${encodeURIComponent(requesterID)}/accept`, {
+  const response = await retryOn401(getToken, request)(`${apiUrl.replace(/\/$/, '')}/v1/connections/${encodeURIComponent(requesterID)}/accept`, {
     method: 'POST', headers: { Authorization: `Bearer ${token}` },
   });
   if (response.status === 401 || response.status === 403) throw new SessionExpiredError();

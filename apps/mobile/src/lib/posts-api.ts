@@ -1,4 +1,5 @@
 import { SessionExpiredError } from './profile-api';
+import { GetToken, retryOn401 } from './http';
 
 export type CityPost = {
   id: string; authorId: string; authorName: string; city: string; body: string;
@@ -21,22 +22,22 @@ export function parsePostPage(value: unknown): PostPage {
   return { city: value.city, nextCursor: value.nextCursor, posts: value.posts.map((post) => ({ ...post, authorImageUrl: post.authorImageUrl ?? '' })) } as PostPage;
 }
 
-async function sessionToken(getToken: () => Promise<string | null>) {
+async function sessionToken(getToken: GetToken) {
   const token = await getToken();
   if (!token) throw new SessionExpiredError();
   return token;
 }
 
-export async function fetchCityPosts(apiUrl: string, getToken: () => Promise<string | null>, cursor = '', request: typeof fetch = fetch): Promise<PostPage> {
+export async function fetchCityPosts(apiUrl: string, getToken: GetToken, cursor = '', request: typeof fetch = fetch): Promise<PostPage> {
   const token = await sessionToken(getToken);
   const suffix = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
-  const response = await request(`${apiUrl.replace(/\/$/, '')}/v1/posts${suffix}`, { headers: { Authorization: `Bearer ${token}` } });
+  const response = await retryOn401(getToken, request)(`${apiUrl.replace(/\/$/, '')}/v1/posts${suffix}`, { headers: { Authorization: `Bearer ${token}` } });
   if (response.status === 401 || response.status === 403) throw new SessionExpiredError();
   if (!response.ok) throw new Error('Could not load city posts. Please try again.');
   return parsePostPage(await response.json());
 }
 
-export async function createCityPost(apiUrl: string, getToken: () => Promise<string | null>, body: string, photo?: PickedPhoto, request: typeof fetch = fetch): Promise<void> {
+export async function createCityPost(apiUrl: string, getToken: GetToken, body: string, photo?: PickedPhoto, request: typeof fetch = fetch): Promise<void> {
   const trimmed = body.trim();
   if (![...trimmed].length || [...trimmed].length > 1000) throw new Error('Write 1–1000 characters.');
   if (photo?.fileSize && photo.fileSize > 6 * 1024 * 1024) throw new Error('Choose a photo smaller than 6 MB.');
@@ -44,7 +45,7 @@ export async function createCityPost(apiUrl: string, getToken: () => Promise<str
   const form = new FormData();
   form.append('body', trimmed);
   if (photo) form.append('photo', photo.file, photo.fileName);
-  const response = await request(`${apiUrl.replace(/\/$/, '')}/v1/posts`, {
+  const response = await retryOn401(getToken, request)(`${apiUrl.replace(/\/$/, '')}/v1/posts`, {
     method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form,
   });
   if (response.status === 401 || response.status === 403) throw new SessionExpiredError();
@@ -65,21 +66,21 @@ export function parseReplyPage(value: unknown): ReplyPage {
   return { replies: value.replies.map((reply) => ({ ...reply, authorImageUrl: reply.authorImageUrl ?? '' })), nextCursor: value.nextCursor } as ReplyPage;
 }
 
-export async function fetchPostReplies(apiUrl: string, getToken: () => Promise<string | null>, postId: string, cursor = '', request: typeof fetch = fetch): Promise<ReplyPage> {
+export async function fetchPostReplies(apiUrl: string, getToken: GetToken, postId: string, cursor = '', request: typeof fetch = fetch): Promise<ReplyPage> {
   const token = await sessionToken(getToken);
   const suffix = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
-  const response = await request(`${apiUrl.replace(/\/$/, '')}/v1/posts/${encodeURIComponent(postId)}/replies${suffix}`, { headers: { Authorization: `Bearer ${token}` } });
+  const response = await retryOn401(getToken, request)(`${apiUrl.replace(/\/$/, '')}/v1/posts/${encodeURIComponent(postId)}/replies${suffix}`, { headers: { Authorization: `Bearer ${token}` } });
   if (response.status === 401 || response.status === 403) throw new SessionExpiredError();
   if (response.status === 404) throw new Error('This post is no longer available in your city.');
   if (!response.ok) throw new Error('Could not load replies. Please try again.');
   return parseReplyPage(await response.json());
 }
 
-export async function createPostReply(apiUrl: string, getToken: () => Promise<string | null>, postId: string, body: string, request: typeof fetch = fetch): Promise<PostReply> {
+export async function createPostReply(apiUrl: string, getToken: GetToken, postId: string, body: string, request: typeof fetch = fetch): Promise<PostReply> {
   const trimmed = body.trim();
   if (![...trimmed].length || [...trimmed].length > 1000) throw new Error('Write 1–1000 characters.');
   const token = await sessionToken(getToken);
-  const response = await request(`${apiUrl.replace(/\/$/, '')}/v1/posts/${encodeURIComponent(postId)}/replies`, {
+  const response = await retryOn401(getToken, request)(`${apiUrl.replace(/\/$/, '')}/v1/posts/${encodeURIComponent(postId)}/replies`, {
     method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ body: trimmed }),
   });
   if (response.status === 401 || response.status === 403) throw new SessionExpiredError();

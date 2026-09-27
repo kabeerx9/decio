@@ -3,9 +3,10 @@ import * as Ably from 'ably';
 import { useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 
+import { GetToken } from './http';
 import { fetchRealtimeToken, messageChangeOtherUserId } from './realtime-api';
 
-export function useUserEvents(apiUrl: string | undefined, userId: string | null | undefined, getToken: () => Promise<string | null>) {
+export function useUserEvents(apiUrl: string | undefined, userId: string | null | undefined, getToken: GetToken) {
   const queryClient = useQueryClient();
   const getTokenRef = useRef(getToken);
   getTokenRef.current = getToken;

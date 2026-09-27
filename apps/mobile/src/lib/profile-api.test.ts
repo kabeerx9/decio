@@ -97,3 +97,16 @@ test('fetchMyProfile treats rejected sessions as expired', async () => {
     SessionExpiredError,
   );
 });
+
+test('fetchMyProfile survives a token that expired in flight by retrying with a fresh one', async () => {
+  const seen: string[] = [];
+  const profile = await fetchMyProfile('http://localhost:8080', async (options) => options?.skipCache ? 'fresh' : 'stale', async (_url, options) => {
+    const auth = new Headers(options?.headers).get('Authorization') ?? '';
+    seen.push(auth);
+    return auth === 'Bearer fresh'
+      ? new Response(JSON.stringify({ id: 'user_1', displayName: 'Asha', city: 'Pune', bio: '', headline: '', interests: [] }), { status: 200 })
+      : new Response('expired', { status: 401 });
+  });
+  assert.equal(profile.id, 'user_1');
+  assert.deepEqual(seen, ['Bearer stale', 'Bearer fresh']);
+});

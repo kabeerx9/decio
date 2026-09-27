@@ -1,6 +1,7 @@
 import type { TokenRequest } from 'ably';
 
 import { SessionExpiredError } from './profile-api';
+import { GetToken, retryOn401 } from './http';
 
 export function messageChangeOtherUserId(data: unknown): string | null {
   let payload = data;
@@ -15,10 +16,10 @@ export function messageChangeOtherUserId(data: unknown): string | null {
   return typeof payload.otherUserId === 'string' && payload.otherUserId.length > 0 ? payload.otherUserId : null;
 }
 
-export async function fetchRealtimeToken(apiUrl: string, getToken: () => Promise<string | null>, request: typeof fetch = fetch): Promise<TokenRequest> {
+export async function fetchRealtimeToken(apiUrl: string, getToken: GetToken, request: typeof fetch = fetch): Promise<TokenRequest> {
   const session = await getToken();
   if (!session) throw new SessionExpiredError();
-  const response = await request(`${apiUrl.replace(/\/$/, '')}/v1/realtime/token`, {
+  const response = await retryOn401(getToken, request)(`${apiUrl.replace(/\/$/, '')}/v1/realtime/token`, {
     headers: { Authorization: `Bearer ${session}` },
   });
   if (response.status === 401 || response.status === 403) throw new SessionExpiredError();

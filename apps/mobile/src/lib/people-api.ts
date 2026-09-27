@@ -1,4 +1,5 @@
 import { parseProfile, Profile, SessionExpiredError } from './profile-api';
+import { GetToken, retryOn401 } from './http';
 
 export type PeoplePage = { people: Profile[]; nextCursor: string };
 
@@ -11,13 +12,13 @@ function parsePeoplePage(value: unknown): PeoplePage {
 }
 
 export async function searchPeople(
-  apiUrl: string, getToken: () => Promise<string | null>, query: string, cursor = '', request: typeof fetch = fetch,
+  apiUrl: string, getToken: GetToken, query: string, cursor = '', request: typeof fetch = fetch,
 ): Promise<PeoplePage> {
   const token = await getToken();
   if (!token) throw new SessionExpiredError();
   const params = new URLSearchParams({ q: query.trim() });
   if (cursor) params.set('cursor', cursor);
-  const response = await request(`${apiUrl.replace(/\/$/, '')}/v1/people?${params}`, {
+  const response = await retryOn401(getToken, request)(`${apiUrl.replace(/\/$/, '')}/v1/people?${params}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (response.status === 401 || response.status === 403) throw new SessionExpiredError();
@@ -26,11 +27,11 @@ export async function searchPeople(
 }
 
 export async function fetchPublicProfile(
-  apiUrl: string, getToken: () => Promise<string | null>, id: string, request: typeof fetch = fetch,
+  apiUrl: string, getToken: GetToken, id: string, request: typeof fetch = fetch,
 ): Promise<Profile> {
   const token = await getToken();
   if (!token) throw new SessionExpiredError();
-  const response = await request(`${apiUrl.replace(/\/$/, '')}/v1/people/${encodeURIComponent(id)}`, {
+  const response = await retryOn401(getToken, request)(`${apiUrl.replace(/\/$/, '')}/v1/people/${encodeURIComponent(id)}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (response.status === 401 || response.status === 403) throw new SessionExpiredError();
