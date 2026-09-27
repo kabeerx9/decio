@@ -28,6 +28,30 @@ test('post creation sends multipart with text and bearer token', async () => {
   await createCityPost('https://api.test', async () => 'token', ' Hello city ', undefined, request);
 });
 
+test('photo creation sends the prepared file as a multipart part', async () => {
+  class TestFormData {
+    parts: [string, unknown][] = [];
+    append(name: string, value: unknown) { this.parts.push([name, value]); }
+  }
+  const originalFormData = globalThis.FormData;
+  globalThis.FormData = TestFormData as unknown as typeof FormData;
+  try {
+    const file = { name: 'city-photo.jpg', type: 'image/jpeg', bytes: async () => new Uint8Array([1, 2, 3]) } as unknown as Blob;
+    const request: typeof fetch = async (_input, init) => {
+      assert.deepEqual((init?.body as unknown as TestFormData).parts, [
+        ['body', 'Hello city'],
+        ['photo', file],
+      ]);
+      return new Response(null, { status: 201 });
+    };
+    await createCityPost('https://api.test', async () => 'token', 'Hello city', {
+      uri: 'file:///city-photo.jpg', file, fileName: 'city-photo.jpg',
+    }, request);
+  } finally {
+    globalThis.FormData = originalFormData;
+  }
+});
+
 test('post creation rejects missing session and invalid text before network', async () => {
   const noNetwork: typeof fetch = async () => { throw new Error('network reached'); };
   await assert.rejects(createCityPost('https://api.test', async () => null, 'Hello', undefined, noNetwork), SessionExpiredError);

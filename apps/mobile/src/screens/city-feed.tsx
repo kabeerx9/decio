@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
+import { File } from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { createCityPost, fetchCityPosts, PickedPhoto, postPhotoURL } from '@/lib/posts-api';
 import { SessionExpiredError } from '@/lib/profile-api';
@@ -54,7 +55,8 @@ export function CityFeed({ apiUrl, userId, city, getToken, onMyProfile, onSessio
       if (asset.width > 1600 || asset.height > 1600) context.resize(asset.width >= asset.height ? { width: 1600, height: null } : { width: null, height: 1600 });
       const rendered = await context.renderAsync();
       const saved = await rendered.saveAsync({ format: ImageManipulator.SaveFormat.JPEG, compress: 0.75 });
-      setPhoto({ uri: saved.uri, mimeType: 'image/jpeg', fileName: 'city-photo.jpg' });
+      const file = Platform.OS === 'web' ? await (await fetch(saved.uri)).blob() : new File(saved.uri);
+      setPhoto({ uri: saved.uri, file, fileName: 'city-photo.jpg', fileSize: file.size });
     } catch {
       setPickerError('Could not prepare that photo. Choose another one.');
     }

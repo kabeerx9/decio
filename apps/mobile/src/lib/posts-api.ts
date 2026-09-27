@@ -5,7 +5,7 @@ export type CityPost = {
   hasPhoto: boolean; createdAt: string;
 };
 export type PostPage = { city: string; posts: CityPost[]; nextCursor: string };
-export type PickedPhoto = { uri: string; mimeType: string; fileName: string; fileSize?: number };
+export type PickedPhoto = { uri: string; file: Blob; fileName: string; fileSize?: number };
 
 export function parsePostPage(value: unknown): PostPage {
   if (!value || typeof value !== 'object' || !('city' in value) || typeof value.city !== 'string' ||
@@ -40,14 +40,7 @@ export async function createCityPost(apiUrl: string, getToken: () => Promise<str
   const token = await sessionToken(getToken);
   const form = new FormData();
   form.append('body', trimmed);
-  if (photo) {
-    if (typeof document !== 'undefined') {
-      const imageResponse = await fetch(photo.uri);
-      form.append('photo', await imageResponse.blob(), photo.fileName);
-    } else {
-      form.append('photo', { uri: photo.uri, type: photo.mimeType, name: photo.fileName } as unknown as Blob);
-    }
-  }
+  if (photo) form.append('photo', photo.file, photo.fileName);
   const response = await request(`${apiUrl.replace(/\/$/, '')}/v1/posts`, {
     method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form,
   });

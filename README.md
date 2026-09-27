@@ -30,11 +30,18 @@ A people-first city network rebuilt with Expo, Go, Clerk, Postgres, and Ably. Th
    go run ./cmd/server
    ```
 
-5. Start Expo in another terminal:
+5. Install dependencies and create a development build for the simulator or emulator:
 
    ```sh
    cd apps/mobile
    npm install
+   npm run ios      # iOS simulator
+   # or: npm run android  # Android emulator
+   ```
+
+   On later runs, start Metro and open the installed development build:
+
+   ```sh
    npm start
    ```
 
