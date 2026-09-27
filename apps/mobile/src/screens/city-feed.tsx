@@ -9,6 +9,7 @@ import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, T
 
 import { CityPost, createCityPost, fetchCityPosts, PickedPhoto, postPhotoURL } from '@/lib/posts-api';
 import { SessionExpiredError } from '@/lib/profile-api';
+import { Avatar } from '@/components/avatar';
 import { PostReplies } from '@/screens/post-replies';
 import { colors, fonts } from '@/theme';
 
@@ -80,7 +81,7 @@ export function CityFeed({ apiUrl, userId, city, getToken, onMyProfile, onSessio
         </View>}
       <View style={styles.feedHeading}><Text style={styles.sectionTitle}>Latest in {city}</Text><Pressable accessibilityRole="button" accessibilityLabel="Refresh posts" onPress={() => void feed.refetch()}><Ionicons name="refresh" size={20} color={colors.accent} /></Pressable></View>
       {feed.isPending ? <ActivityIndicator color={colors.accent} style={styles.loading} /> : feed.error ? <View style={styles.empty}><Text style={styles.error}>{feed.error.message}</Text><Pressable accessibilityRole="button" onPress={() => void feed.refetch()}><Text style={styles.retry}>Try again</Text></Pressable></View> : !posts.length ? <View style={styles.empty}><Text style={styles.emptyTitle}>No posts yet</Text><Text style={styles.muted}>Start the conversation in {city}.</Text></View> : posts.map((post) => <View key={post.id} style={styles.card}>
-        <View style={styles.authorRow}><View style={styles.avatar}><Text style={styles.avatarText}>{post.authorName.charAt(0).toUpperCase()}</Text></View><View style={styles.authorDetails}><Text style={styles.author}>{post.authorName}</Text><Text style={styles.meta}>{new Date(post.createdAt).toLocaleDateString()} · {post.city}</Text></View></View>
+        <View style={styles.authorRow}><Avatar name={post.authorName} imageUrl={post.authorImageUrl} size={40} radius={14} /><View style={styles.authorDetails}><Text style={styles.author}>{post.authorName}</Text><Text style={styles.meta}>{new Date(post.createdAt).toLocaleDateString()} · {post.city}</Text></View></View>
         <Text style={styles.body}>{post.body}</Text>
         {post.hasPhoto && imageToken && <Image source={{ uri: postPhotoURL(apiUrl, post.id), headers: { Authorization: `Bearer ${imageToken}` } }} style={styles.postImage} contentFit="cover" accessibilityLabel={`Photo by ${post.authorName}`} />}
         <Pressable accessibilityRole="button" accessibilityLabel={`View replies to ${post.authorName}'s post`} onPress={() => setSelectedPost(post)} style={styles.replyAction}><Ionicons name="chatbubble-outline" size={18} color={colors.accent} /><Text style={styles.replyActionText}>Reply</Text></Pressable>

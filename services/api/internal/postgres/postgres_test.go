@@ -54,6 +54,15 @@ func TestFindOrCreateKeepsProfilesSeparate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	imageURL := "https://images.clerk.test/avatar.jpg"
+	saved, err = profiles.SetProfileImageURL(ctx, firstID, imageURL)
+	if err != nil || saved.ImageURL != imageURL {
+		t.Fatalf("save image URL: %+v %v", saved, err)
+	}
+	saved, err = profiles.Update(ctx, firstID, domain.ProfileInput{DisplayName: "Kabeer", City: "Mumbai", Bio: "City explorer", Headline: "Mobile engineer", Interests: []string{"Go", "Design"}})
+	if err != nil || saved.ImageURL != imageURL {
+		t.Fatalf("profile edit must retain image URL: %+v %v", saved, err)
+	}
 	reloaded, err := profiles.FindOrCreate(ctx, firstID)
 	if err != nil {
 		t.Fatal(err)
@@ -64,6 +73,10 @@ func TestFindOrCreateKeepsProfilesSeparate(t *testing.T) {
 	}
 	if !reflect.DeepEqual(saved, reloaded) || other.DisplayName != "" || other.City != "" {
 		t.Fatalf("profile edit did not persist separately: saved=%+v reloaded=%+v other=%+v", saved, reloaded, other)
+	}
+	cleared, err := profiles.SetProfileImageURL(ctx, firstID, "")
+	if err != nil || cleared.ImageURL != "" {
+		t.Fatalf("clear image URL: %+v %v", cleared, err)
 	}
 }
 
@@ -101,6 +114,9 @@ func TestSearchPeopleMatchesPublicProfilesAndPages(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	if _, err := profiles.SetProfileImageURL(ctx, ids[22], "https://images.clerk.test/illustrator.jpg"); err != nil {
+		t.Fatal(err)
+	}
 	viewerID := ids[0]
 	page, err := profiles.SearchPeople(ctx, viewerID, prefix+"mUmBaI", "")
 	if err != nil {
@@ -117,7 +133,7 @@ func TestSearchPeopleMatchesPublicProfilesAndPages(t *testing.T) {
 		t.Fatalf("second page wrong: %+v", second)
 	}
 	byHeadline, err := profiles.SearchPeople(ctx, viewerID, prefix+"illustrator", "")
-	if err != nil || len(byHeadline.People) != 1 || byHeadline.People[0].ID != ids[22] {
+	if err != nil || len(byHeadline.People) != 1 || byHeadline.People[0].ID != ids[22] || byHeadline.People[0].ImageURL != "https://images.clerk.test/illustrator.jpg" {
 		t.Fatalf("headline search wrong: %+v %v", byHeadline, err)
 	}
 	byName, err := profiles.SearchPeople(ctx, viewerID, "pErSoN 21 "+prefix, "")
@@ -129,7 +145,7 @@ func TestSearchPeopleMatchesPublicProfilesAndPages(t *testing.T) {
 		t.Fatalf("empty search wrong: %+v %v", noResults, err)
 	}
 	public, err := profiles.PublicProfile(ctx, ids[22])
-	if err != nil || public.ID != ids[22] || public.City != "Pune" {
+	if err != nil || public.ID != ids[22] || public.City != "Pune" || public.ImageURL != "https://images.clerk.test/illustrator.jpg" {
 		t.Fatalf("public profile wrong: %+v %v", public, err)
 	}
 	if _, err := profiles.PublicProfile(ctx, prefix+"missing"); err != domain.ErrProfileNotFound {

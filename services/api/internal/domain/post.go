@@ -8,13 +8,14 @@ import (
 var ErrPostNotFound = errors.New("post not found")
 
 type Post struct {
-	ID         string    `json:"id"`
-	AuthorID   string    `json:"authorId"`
-	AuthorName string    `json:"authorName"`
-	City       string    `json:"city"`
-	Body       string    `json:"body"`
-	HasPhoto   bool      `json:"hasPhoto"`
-	CreatedAt  time.Time `json:"createdAt"`
+	ID             string    `json:"id"`
+	AuthorID       string    `json:"authorId"`
+	AuthorName     string    `json:"authorName"`
+	AuthorImageURL string    `json:"authorImageUrl"`
+	City           string    `json:"city"`
+	Body           string    `json:"body"`
+	HasPhoto       bool      `json:"hasPhoto"`
+	CreatedAt      time.Time `json:"createdAt"`
 }
 
 type PostPage struct {
@@ -24,12 +25,13 @@ type PostPage struct {
 }
 
 type PostReply struct {
-	ID         string    `json:"id"`
-	PostID     string    `json:"postId"`
-	AuthorID   string    `json:"authorId"`
-	AuthorName string    `json:"authorName"`
-	Body       string    `json:"body"`
-	CreatedAt  time.Time `json:"createdAt"`
+	ID             string    `json:"id"`
+	PostID         string    `json:"postId"`
+	AuthorID       string    `json:"authorId"`
+	AuthorName     string    `json:"authorName"`
+	AuthorImageURL string    `json:"authorImageUrl"`
+	Body           string    `json:"body"`
+	CreatedAt      time.Time `json:"createdAt"`
 }
 
 type ReplyPage struct {

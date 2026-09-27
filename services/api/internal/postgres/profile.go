@@ -12,8 +12,8 @@ func (s *Store) FindOrCreate(ctx context.Context, clerkUserID string) (domain.Pr
 		return domain.Profile{}, err
 	}
 	var profile domain.Profile
-	err = s.pool.QueryRow(ctx, `SELECT id, display_name, city, bio, headline, interests FROM profiles WHERE id = $1`, clerkUserID).
-		Scan(&profile.ID, &profile.DisplayName, &profile.City, &profile.Bio, &profile.Headline, &profile.Interests)
+	err = s.pool.QueryRow(ctx, `SELECT id, display_name, city, bio, headline, interests, image_url FROM profiles WHERE id = $1`, clerkUserID).
+		Scan(&profile.ID, &profile.DisplayName, &profile.City, &profile.Bio, &profile.Headline, &profile.Interests, &profile.ImageURL)
 	return profile, err
 }
 
@@ -28,8 +28,18 @@ func (s *Store) Update(ctx context.Context, clerkUserID string, input domain.Pro
 			bio = EXCLUDED.bio,
 			headline = EXCLUDED.headline,
 			interests = EXCLUDED.interests
-		RETURNING id, display_name, city, bio, headline, interests
+		RETURNING id, display_name, city, bio, headline, interests, image_url
 	`, clerkUserID, input.DisplayName, input.City, input.Bio, input.Headline, input.Interests).
-		Scan(&profile.ID, &profile.DisplayName, &profile.City, &profile.Bio, &profile.Headline, &profile.Interests)
+		Scan(&profile.ID, &profile.DisplayName, &profile.City, &profile.Bio, &profile.Headline, &profile.Interests, &profile.ImageURL)
+	return profile, err
+}
+
+func (s *Store) SetProfileImageURL(ctx context.Context, userID, imageURL string) (domain.Profile, error) {
+	var profile domain.Profile
+	err := s.pool.QueryRow(ctx, `
+		INSERT INTO profiles (id, image_url) VALUES ($1, $2)
+		ON CONFLICT (id) DO UPDATE SET image_url = EXCLUDED.image_url
+		RETURNING id, display_name, city, bio, headline, interests, image_url
+	`, userID, imageURL).Scan(&profile.ID, &profile.DisplayName, &profile.City, &profile.Bio, &profile.Headline, &profile.Interests, &profile.ImageURL)
 	return profile, err
 }

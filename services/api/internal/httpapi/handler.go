@@ -14,7 +14,10 @@ import (
 type ProfileStore interface {
 	FindOrCreate(ctx context.Context, clerkUserID string) (domain.Profile, error)
 	Update(ctx context.Context, clerkUserID string, input domain.ProfileInput) (domain.Profile, error)
+	SetProfileImageURL(ctx context.Context, clerkUserID, imageURL string) (domain.Profile, error)
 }
+
+type ProfileImageSource func(ctx context.Context, clerkUserID string) (string, error)
 
 type Store interface {
 	ProfileStore
@@ -37,7 +40,7 @@ func userID(ctx context.Context) (string, bool) {
 	return id, ok && id != ""
 }
 
-func NewHandler(storage Store, authenticate Middleware, realtime Realtime) http.Handler {
+func NewHandler(storage Store, authenticate Middleware, realtime Realtime, imageSources ...ProfileImageSource) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -94,6 +97,30 @@ func NewHandler(storage Store, authenticate Middleware, realtime Realtime) http.
 			log.Printf("encode profile: %v", err)
 		}
 	})))
+	if len(imageSources) > 0 && imageSources[0] != nil {
+		mux.Handle("POST /v1/me/image/sync", authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Cache-Control", "no-store")
+			id, ok := userID(r.Context())
+			if !ok {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			imageURL, err := imageSources[0](r.Context(), id)
+			if err != nil {
+				log.Printf("load Clerk profile image: %v", err)
+				http.Error(w, "profile image unavailable", http.StatusBadGateway)
+				return
+			}
+			profile, err := storage.SetProfileImageURL(r.Context(), id, imageURL)
+			if err != nil {
+				log.Printf("sync profile image: %v", err)
+				http.Error(w, "profile image unavailable", http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(profile)
+		})))
+	}
 	registerPeopleRoutes(mux, storage, authenticate)
 	registerConnectionRoutes(mux, storage, realtime, authenticate)
 	registerChatRoutes(mux, storage, realtime, authenticate)

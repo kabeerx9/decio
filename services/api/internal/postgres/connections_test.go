@@ -47,6 +47,9 @@ func TestConnectionAuthorizationAndStateTransitions(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	if _, err := store.SetProfileImageURL(ctx, ids[1], "https://images.clerk.test/connection.jpg"); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := store.FindOrCreate(ctx, ids[3]); err != nil {
 		t.Fatal(err)
 	}
@@ -70,6 +73,10 @@ func TestConnectionAuthorizationAndStateTransitions(t *testing.T) {
 		if err != nil || len(list) != 1 || list[0].Status != test.status {
 			t.Fatalf("%s sees %v, err=%v", test.user, list, err)
 		}
+	}
+	list, err := store.ListConnections(ctx, ids[0])
+	if err != nil || len(list) != 1 || list[0].Other.ImageURL != "https://images.clerk.test/connection.jpg" {
+		t.Fatalf("connection photo: %+v %v", list, err)
 	}
 	for _, user := range []string{ids[0], ids[2]} {
 		if err := store.AcceptConnection(ctx, user, ids[0]); !errors.Is(err, domain.ErrConnectionNotFound) {

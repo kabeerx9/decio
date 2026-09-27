@@ -35,10 +35,53 @@ type fakeProfiles struct {
 	postPhoto           []byte
 	postKind            string
 	postCursor          string
+	imageURL            string
 	replyResult         domain.PostReply
 	replyPage           domain.ReplyPage
 	replyBody           string
 	replyCursor         string
+}
+
+func (f *fakeProfiles) SetProfileImageURL(_ context.Context, id, url string) (domain.Profile, error) {
+	f.requestedID, f.imageURL = id, url
+	f.profile.ImageURL = url
+	return f.profile, f.err
+}
+
+func TestSyncProfileImageUsesClerkForVerifiedUser(t *testing.T) {
+	profiles := &fakeProfiles{profile: domain.Profile{ID: "user_from_verified_token", Interests: []string{}}}
+	called := ""
+	imageSource := ProfileImageSource(func(_ context.Context, id string) (string, error) {
+		called = id
+		return "https://images.clerk.test/avatar.jpg", nil
+	})
+	server := NewHandler(profiles, testAuth, nil, imageSource)
+	request := httptest.NewRequest(http.MethodPost, "/v1/me/image/sync", strings.NewReader(`{"imageUrl":"https://attacker.test/avatar"}`))
+	request.Header.Set("Authorization", "Bearer good-session")
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || called != "user_from_verified_token" || profiles.imageURL != "https://images.clerk.test/avatar.jpg" {
+		t.Fatalf("image sync: status=%d sourceUser=%q stored=%q", response.Code, called, profiles.imageURL)
+	}
+	request = httptest.NewRequest(http.MethodPost, "/v1/me/image/sync", nil)
+	response = httptest.NewRecorder()
+	server.ServeHTTP(response, request)
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthorized sync: status=%d", response.Code)
+	}
+	server = NewHandler(profiles, testAuth, nil, func(context.Context, string) (string, error) { return "", errors.New("Clerk unavailable") })
+	request.Header.Set("Authorization", "Bearer good-session")
+	response = httptest.NewRecorder()
+	server.ServeHTTP(response, request)
+	if response.Code != http.StatusBadGateway {
+		t.Fatalf("Clerk failure: status=%d", response.Code)
+	}
+	server = NewHandler(profiles, testAuth, nil, func(context.Context, string) (string, error) { return "", nil })
+	response = httptest.NewRecorder()
+	server.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || profiles.imageURL != "" {
+		t.Fatalf("removed photo sync: status=%d stored=%q", response.Code, profiles.imageURL)
+	}
 }
 
 func (f *fakeProfiles) CreateReply(_ context.Context, id, postID, body string) (domain.PostReply, error) {

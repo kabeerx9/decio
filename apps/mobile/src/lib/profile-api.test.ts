@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { fetchMyProfile, saveMyProfile, SessionExpiredError } from './profile-api';
+import { fetchMyProfile, saveMyProfile, SessionExpiredError, syncProfileImage } from './profile-api';
 
-const emptyProfile = { id: 'user_1', displayName: '', city: '', bio: '', headline: '', interests: [] };
+const emptyProfile = { id: 'user_1', displayName: '', city: '', bio: '', headline: '', interests: [], imageUrl: '' };
 
 test('fetchMyProfile sends the current Clerk token to the Go API', async () => {
   let authorization = '';
@@ -32,7 +32,19 @@ test('saveMyProfile sends a complete edit and fetchMyProfile reloads it', async 
   const reloaded = await fetchMyProfile('http://localhost:8080', async () => 'session-token', request);
   assert.deepEqual(requests, ['PUT', 'GET']);
   assert.deepEqual(reloaded, saved);
-  assert.deepEqual(saved, { id: 'user_1', displayName: 'Kabeer', city: 'Mumbai', bio: 'Hello', headline: 'Mobile engineer', interests: ['Go'] });
+  assert.deepEqual(saved, { id: 'user_1', displayName: 'Kabeer', city: 'Mumbai', bio: 'Hello', headline: 'Mobile engineer', interests: ['Go'], imageUrl: '' });
+});
+
+test('syncProfileImage sends no client-supplied URL and returns the server profile', async () => {
+  const synced = await syncProfileImage('https://api.test/', async () => 'session-token', async (url, options) => {
+    assert.equal(url, 'https://api.test/v1/me/image/sync');
+    assert.equal(options?.method, 'POST');
+    assert.equal(options?.body, undefined);
+    assert.equal(new Headers(options?.headers).get('Authorization'), 'Bearer session-token');
+    return Response.json({ ...emptyProfile, imageUrl: 'https://images.clerk.test/avatar.jpg' });
+  });
+  assert.equal(synced.imageUrl, 'https://images.clerk.test/avatar.jpg');
+  await assert.rejects(syncProfileImage('https://api.test', async () => null, async () => { throw new Error('network reached'); }), SessionExpiredError);
 });
 
 test('saveMyProfile rejects invalid edits before making a request', async () => {

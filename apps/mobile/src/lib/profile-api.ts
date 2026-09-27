@@ -1,5 +1,5 @@
 export type ProfileInput = { displayName: string; city: string; bio: string; headline: string; interests: string[] };
-export type Profile = ProfileInput & { id: string };
+export type Profile = ProfileInput & { id: string; imageUrl: string };
 
 export class SessionExpiredError extends Error {
   constructor() { super('Your session has ended. Please sign in again.'); }
@@ -11,10 +11,22 @@ export function parseProfile(value: unknown): Profile {
     !('city' in value) || typeof value.city !== 'string' ||
     !('bio' in value) || typeof value.bio !== 'string' ||
     !('headline' in value) || typeof value.headline !== 'string' ||
-    !('interests' in value) || !Array.isArray(value.interests) || !value.interests.every((interest) => typeof interest === 'string')) {
+    !('interests' in value) || !Array.isArray(value.interests) || !value.interests.every((interest) => typeof interest === 'string') ||
+    ('imageUrl' in value && typeof value.imageUrl !== 'string')) {
     throw new Error('The profile response was unexpected. Please try again.');
   }
-  return value as Profile;
+  return { ...value, imageUrl: 'imageUrl' in value ? value.imageUrl : '' } as Profile;
+}
+
+export async function syncProfileImage(apiUrl: string, getToken: () => Promise<string | null>, request: typeof fetch = fetch): Promise<Profile> {
+  const token = await getToken();
+  if (!token) throw new SessionExpiredError();
+  const response = await request(`${apiUrl.replace(/\/$/, '')}/v1/me/image/sync`, {
+    method: 'POST', headers: { Authorization: `Bearer ${token}` },
+  });
+  if (response.status === 401 || response.status === 403) throw new SessionExpiredError();
+  if (!response.ok) throw new Error('Clerk saved your photo, but Decio could not update it. Try again.');
+  return parseProfile(await response.json());
 }
 
 export function normalizeProfileInput(input: ProfileInput): ProfileInput {

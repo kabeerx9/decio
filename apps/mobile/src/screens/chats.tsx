@@ -7,6 +7,7 @@ import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable,
 import { DirectMessage, fetchMessages, markMessagesRead, sendMessage } from '@/lib/chat-api';
 import { fetchConnections } from '@/lib/connections-api';
 import { Profile, SessionExpiredError } from '@/lib/profile-api';
+import { Avatar } from '@/components/avatar';
 import { colors, fonts } from '@/theme';
 
 type Props = { apiUrl: string; userId: string; getToken: () => Promise<string | null>; onSessionExpired: () => void };
@@ -28,7 +29,7 @@ export function Chats({ apiUrl, userId, getToken, onSessionExpired }: Props) {
       people.length === 0 ? <View style={styles.empty}><Ionicons name="chatbubbles-outline" size={32} color={colors.accent} /><Text style={styles.emptyTitle}>No conversations yet</Text><Text style={styles.muted}>Connect with someone in Discover to start chatting.</Text></View> :
         <FlatList data={people} keyExtractor={(item) => item.other.id} contentContainerStyle={styles.list} renderItem={({ item }) =>
           <Pressable accessibilityRole="button" accessibilityLabel={`Chat with ${item.other.displayName}${item.unreadCount ? `, ${item.unreadCount} unread messages` : ''}`} onPress={() => setOther(item.other)} style={styles.person}>
-            <View style={styles.avatar}><Text style={styles.avatarText}>{item.other.displayName.charAt(0).toUpperCase()}</Text></View>
+            <Avatar name={item.other.displayName} imageUrl={item.other.imageUrl} size={48} radius={16} />
             <View style={styles.personText}><Text style={styles.personName}>{item.other.displayName}</Text><Text style={styles.muted}>{item.other.city}</Text></View>
             {item.unreadCount > 0 && <View style={styles.unreadBadge}><Text style={styles.unreadBadgeText}>{item.unreadCount > 99 ? '99+' : item.unreadCount}</Text></View>}
             <Ionicons name="chevron-forward" size={18} color={colors.muted} />
@@ -87,7 +88,7 @@ function Conversation({ apiUrl, userId, other, getToken, onBack, onSessionExpire
   return <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.page}>
     <View style={styles.conversationHeader}>
       <Pressable accessibilityRole="button" accessibilityLabel="Back to conversations" onPress={onBack} style={styles.back}><Ionicons name="arrow-back" size={21} color={colors.ink} /></Pressable>
-      <View style={styles.avatarSmall}><Text style={styles.avatarText}>{other.displayName.charAt(0).toUpperCase()}</Text></View>
+      <Avatar name={other.displayName} imageUrl={other.imageUrl} size={40} radius={14} />
       <View><Text style={styles.personName}>{other.displayName}</Text><Text style={styles.muted}>{other.city}</Text></View>
     </View>
     {history.isPending ? <ActivityIndicator color={colors.accent} style={styles.loading} /> : history.error ?

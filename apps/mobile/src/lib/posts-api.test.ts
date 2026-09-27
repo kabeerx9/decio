@@ -8,10 +8,11 @@ test('city feed uses session and cursor, then validates the page', async () => {
   const request: typeof fetch = async (input, init) => {
     assert.equal(input, 'https://api.test/v1/posts?cursor=23');
     assert.equal(new Headers(init?.headers).get('Authorization'), 'Bearer token');
-    return Response.json({ city: 'Mumbai', posts: [{ id: '22', authorId: 'a', authorName: 'Asha', city: 'Mumbai', body: 'Hi', hasPhoto: false, createdAt: '2026-09-27T00:00:00Z' }], nextCursor: '' });
+    return Response.json({ city: 'Mumbai', posts: [{ id: '22', authorId: 'a', authorName: 'Asha', authorImageUrl: 'https://images.clerk.test/asha.jpg', city: 'Mumbai', body: 'Hi', hasPhoto: false, createdAt: '2026-09-27T00:00:00Z' }], nextCursor: '' });
   };
   const page = await fetchCityPosts('https://api.test/', async () => 'token', '23', request);
   assert.equal(page.posts[0].body, 'Hi');
+  assert.equal(page.posts[0].authorImageUrl, 'https://images.clerk.test/asha.jpg');
   assert.equal(postPhotoURL('https://api.test/', '22'), 'https://api.test/v1/posts/22/photo');
   assert.throws(() => parsePostPage({ city: 'Mumbai', posts: [{ id: 1 }], nextCursor: '' }));
 });

@@ -16,6 +16,7 @@ type Profile struct {
 	Bio         string   `json:"bio"`
 	Headline    string   `json:"headline"`
 	Interests   []string `json:"interests"`
+	ImageURL    string   `json:"imageUrl"`
 }
 
 type ProfileInput struct {

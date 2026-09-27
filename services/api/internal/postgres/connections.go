@@ -58,7 +58,7 @@ func (s *Store) AcceptConnection(ctx context.Context, recipientID, requesterID s
 // ListConnections projects each relationship from the current user's side.
 func (s *Store) ListConnections(ctx context.Context, userID string) ([]domain.Connection, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT p.id, p.display_name, p.city, p.bio, p.headline, p.interests,
+		SELECT p.id, p.display_name, p.city, p.bio, p.headline, p.interests, p.image_url,
 			CASE WHEN c.status = 'accepted' THEN 'accepted'
 			     WHEN c.recipient_id = $1 THEN 'incoming' ELSE 'sent' END,
 			COALESCE(unread.count, 0)
@@ -80,7 +80,7 @@ func (s *Store) ListConnections(ctx context.Context, userID string) ([]domain.Co
 	connections := []domain.Connection{}
 	for rows.Next() {
 		var connection domain.Connection
-		if err := rows.Scan(&connection.Other.ID, &connection.Other.DisplayName, &connection.Other.City, &connection.Other.Bio, &connection.Other.Headline, &connection.Other.Interests, &connection.Status, &connection.UnreadCount); err != nil {
+		if err := rows.Scan(&connection.Other.ID, &connection.Other.DisplayName, &connection.Other.City, &connection.Other.Bio, &connection.Other.Headline, &connection.Other.Interests, &connection.Other.ImageURL, &connection.Status, &connection.UnreadCount); err != nil {
 			return nil, err
 		}
 		connections = append(connections, connection)

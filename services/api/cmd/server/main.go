@@ -36,7 +36,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              ":" + port,
-		Handler:           httpapi.AllowOrigins(strings.Split(os.Getenv("CORS_ALLOWED_ORIGINS"), ","))(httpapi.NewHandler(storage, httpapi.ClerkAuth(), events)),
+		Handler:           httpapi.AllowOrigins(strings.Split(os.Getenv("CORS_ALLOWED_ORIGINS"), ","))(httpapi.NewHandler(storage, httpapi.ClerkAuth(), events, httpapi.ClerkImageURL)),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	log.Printf("API listening on :%s", port)

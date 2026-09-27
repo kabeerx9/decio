@@ -37,6 +37,12 @@ func TestCityPostsScopePaginationAndPhoto(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	if _, err := store.SetProfileImageURL(ctx, author, "https://images.clerk.test/author.jpg"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SetProfileImageURL(ctx, neighbor, "https://images.clerk.test/neighbor.jpg"); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := store.FindOrCreate(ctx, blank); err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +60,7 @@ func TestCityPostsScopePaginationAndPhoto(t *testing.T) {
 			photo, kind = []byte("image data"), "image/jpeg"
 		}
 		post, err := store.CreatePost(ctx, author, fmt.Sprintf("post %d", i), photo, kind)
-		if err != nil || post.City != "Mumbai" || post.AuthorID != author || post.HasPhoto != (i == 0) {
+		if err != nil || post.City != "Mumbai" || post.AuthorID != author || post.AuthorImageURL != "https://images.clerk.test/author.jpg" || post.HasPhoto != (i == 0) {
 			t.Fatalf("create: %+v %v", post, err)
 		}
 	}
@@ -76,7 +82,7 @@ func TestCityPostsScopePaginationAndPhoto(t *testing.T) {
 	}
 	photoID := second.Posts[1].ID
 	reply, err := store.CreateReply(ctx, neighbor, photoID, "Hello from Mumbai")
-	if err != nil || reply.PostID != photoID || reply.AuthorID != neighbor || reply.Body != "Hello from Mumbai" {
+	if err != nil || reply.PostID != photoID || reply.AuthorID != neighbor || reply.AuthorImageURL != "https://images.clerk.test/neighbor.jpg" || reply.Body != "Hello from Mumbai" {
 		t.Fatalf("create reply: %+v %v", reply, err)
 	}
 	replies, err := store.ListReplies(ctx, author, photoID, "")

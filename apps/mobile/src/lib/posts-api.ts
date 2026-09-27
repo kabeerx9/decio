@@ -2,10 +2,10 @@ import { SessionExpiredError } from './profile-api';
 
 export type CityPost = {
   id: string; authorId: string; authorName: string; city: string; body: string;
-  hasPhoto: boolean; createdAt: string;
+  authorImageUrl: string; hasPhoto: boolean; createdAt: string;
 };
 export type PostPage = { city: string; posts: CityPost[]; nextCursor: string };
-export type PostReply = { id: string; postId: string; authorId: string; authorName: string; body: string; createdAt: string };
+export type PostReply = { id: string; postId: string; authorId: string; authorName: string; authorImageUrl: string; body: string; createdAt: string };
 export type ReplyPage = { replies: PostReply[]; nextCursor: string };
 export type PickedPhoto = { uri: string; file: Blob; fileName: string; fileSize?: number };
 
@@ -14,10 +14,11 @@ export function parsePostPage(value: unknown): PostPage {
     !('nextCursor' in value) || typeof value.nextCursor !== 'string' || !('posts' in value) || !Array.isArray(value.posts) ||
     !value.posts.every((post) => post && typeof post === 'object' && typeof post.id === 'string' &&
       typeof post.authorId === 'string' && typeof post.authorName === 'string' && typeof post.city === 'string' &&
-      typeof post.body === 'string' && typeof post.hasPhoto === 'boolean' && typeof post.createdAt === 'string')) {
+      typeof post.body === 'string' && typeof post.hasPhoto === 'boolean' && typeof post.createdAt === 'string' &&
+      (!('authorImageUrl' in post) || typeof post.authorImageUrl === 'string'))) {
     throw new Error('The city feed response was unexpected. Please try again.');
   }
-  return value as PostPage;
+  return { city: value.city, nextCursor: value.nextCursor, posts: value.posts.map((post) => ({ ...post, authorImageUrl: post.authorImageUrl ?? '' })) } as PostPage;
 }
 
 async function sessionToken(getToken: () => Promise<string | null>) {
@@ -60,8 +61,8 @@ export function parseReplyPage(value: unknown): ReplyPage {
     !('replies' in value) || !Array.isArray(value.replies) || !value.replies.every((reply) =>
       reply && typeof reply === 'object' && typeof reply.id === 'string' && typeof reply.postId === 'string' &&
       typeof reply.authorId === 'string' && typeof reply.authorName === 'string' && typeof reply.body === 'string' &&
-      typeof reply.createdAt === 'string')) throw new Error('The replies response was unexpected. Please try again.');
-  return value as ReplyPage;
+      typeof reply.createdAt === 'string' && (!('authorImageUrl' in reply) || typeof reply.authorImageUrl === 'string'))) throw new Error('The replies response was unexpected. Please try again.');
+  return { replies: value.replies.map((reply) => ({ ...reply, authorImageUrl: reply.authorImageUrl ?? '' })), nextCursor: value.nextCursor } as ReplyPage;
 }
 
 export async function fetchPostReplies(apiUrl: string, getToken: () => Promise<string | null>, postId: string, cursor = '', request: typeof fetch = fetch): Promise<ReplyPage> {
@@ -87,5 +88,5 @@ export async function createPostReply(apiUrl: string, getToken: () => Promise<st
   if (!response.ok) throw new Error('Could not send your reply. Please try again.');
   const reply: unknown = await response.json();
   if (!reply || typeof reply !== 'object' || !('id' in reply) || typeof reply.id !== 'string') throw new Error('The reply response was unexpected. Please try again.');
-  return reply as PostReply;
+  return { ...reply, authorImageUrl: 'authorImageUrl' in reply && typeof reply.authorImageUrl === 'string' ? reply.authorImageUrl : '' } as PostReply;
 }

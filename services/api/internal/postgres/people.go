@@ -12,7 +12,7 @@ const peoplePageSize = 20
 
 func (s *Store) SearchPeople(ctx context.Context, viewerID, query, cursor string) (domain.PeoplePage, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, display_name, city, bio, headline, interests
+		SELECT id, display_name, city, bio, headline, interests, image_url
 		FROM profiles
 		WHERE id <> $1 AND id > $3 AND display_name <> ''
 		  AND (strpos(lower(display_name), lower($2)) > 0
@@ -28,7 +28,7 @@ func (s *Store) SearchPeople(ctx context.Context, viewerID, query, cursor string
 	page := domain.PeoplePage{People: []domain.Profile{}}
 	for rows.Next() {
 		var person domain.Profile
-		if err := rows.Scan(&person.ID, &person.DisplayName, &person.City, &person.Bio, &person.Headline, &person.Interests); err != nil {
+		if err := rows.Scan(&person.ID, &person.DisplayName, &person.City, &person.Bio, &person.Headline, &person.Interests, &person.ImageURL); err != nil {
 			return domain.PeoplePage{}, err
 		}
 		page.People = append(page.People, person)
@@ -46,9 +46,9 @@ func (s *Store) SearchPeople(ctx context.Context, viewerID, query, cursor string
 func (s *Store) PublicProfile(ctx context.Context, id string) (domain.Profile, error) {
 	var person domain.Profile
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, display_name, city, bio, headline, interests
+		SELECT id, display_name, city, bio, headline, interests, image_url
 		FROM profiles WHERE id = $1 AND display_name <> ''
-	`, id).Scan(&person.ID, &person.DisplayName, &person.City, &person.Bio, &person.Headline, &person.Interests)
+	`, id).Scan(&person.ID, &person.DisplayName, &person.City, &person.Bio, &person.Headline, &person.Interests, &person.ImageURL)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Profile{}, domain.ErrProfileNotFound
 	}

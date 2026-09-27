@@ -6,6 +6,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, 
 import { fetchPublicProfile, searchPeople } from '@/lib/people-api';
 import { acceptConnection, fetchConnections, requestConnection } from '@/lib/connections-api';
 import { SessionExpiredError } from '@/lib/profile-api';
+import { Avatar } from '@/components/avatar';
 import { colors, fonts } from '@/theme';
 
 type Props = {
@@ -68,7 +69,7 @@ export function PeopleDiscover({ apiUrl, userId, city, getToken, onMyProfile, on
       {detail.isPending ? <ActivityIndicator color={colors.accent} style={styles.loading} /> : detail.error ?
         <Text style={styles.message}>{detail.error.message}</Text> : person ?
           <View style={styles.detail}>
-            <View style={styles.avatar}><Text style={styles.avatarText}>{person.displayName.charAt(0).toUpperCase()}</Text></View>
+            <View style={styles.detailAvatar}><Avatar name={person.displayName} imageUrl={person.imageUrl} size={74} radius={25} /></View>
             <Text style={styles.detailName}>{person.displayName}</Text>
             <Text style={styles.secondary}>{[person.headline, person.city].filter(Boolean).join(' · ')}</Text>
             {!!person.bio && <Text style={styles.bio}>{person.bio}</Text>}
@@ -106,7 +107,7 @@ export function PeopleDiscover({ apiUrl, userId, city, getToken, onMyProfile, on
           <Text style={styles.emptyConnections}>Requests and new connections will show up here.</Text> :
         orderedConnections.map((connection) =>
         <Pressable key={connection.other.id} accessibilityRole="button" accessibilityLabel={`Open ${connection.other.displayName}'s profile, ${connection.status}`} onPress={() => openProfile(connection.other.id)} style={[styles.connectionRow, connection.status === 'incoming' && styles.incomingRow]}>
-          <View style={styles.connectionAvatar}><Text style={styles.smallAvatarText}>{connection.other.displayName.charAt(0).toUpperCase()}</Text></View>
+          <Avatar name={connection.other.displayName} imageUrl={connection.other.imageUrl} size={40} radius={15} />
           <View style={styles.personText}><Text style={styles.personName}>{connection.other.displayName}</Text><Text style={styles.secondary}>{connection.other.city}</Text></View>
           <Text style={styles.connectionLabel}>{connection.status === 'incoming' ? 'Respond' : connection.status === 'sent' ? 'Sent' : 'Connected'}</Text>
         </Pressable>)}
@@ -120,7 +121,7 @@ export function PeopleDiscover({ apiUrl, userId, city, getToken, onMyProfile, on
               const connection = connections.data?.find((item) => item.other.id === person.id);
               return <View key={person.id} style={styles.person}>
               <Pressable accessibilityRole="button" accessibilityLabel={`Open ${person.displayName}'s profile`} onPress={() => openProfile(person.id)} style={styles.personProfile}>
-                <View style={styles.smallAvatar}><Text style={styles.smallAvatarText}>{person.displayName.charAt(0).toUpperCase()}</Text></View>
+                <Avatar name={person.displayName} imageUrl={person.imageUrl} size={44} radius={16} />
                 <View style={styles.personText}><Text style={styles.personName}>{person.displayName}</Text><Text style={styles.secondary} numberOfLines={1}>{[person.headline, person.city].filter(Boolean).join(' · ')}</Text></View>
               </Pressable>
               {connection?.status === 'accepted' || connection?.status === 'sent' ? <Text style={styles.personStatus}>{connection.status === 'accepted' ? 'Connected' : 'Sent'}</Text> :
@@ -151,7 +152,6 @@ const styles = StyleSheet.create({
   emptyConnections: { color: colors.muted, fontFamily: fonts.body, fontSize: 14, lineHeight: 20 },
   connectionRow: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: 1, borderColor: colors.line },
   incomingRow: { backgroundColor: colors.blush, borderRadius: 16, paddingHorizontal: 12, borderBottomWidth: 0, marginBottom: 4 },
-  connectionAvatar: { width: 40, height: 40, borderRadius: 15, backgroundColor: colors.lilac, alignItems: 'center', justifyContent: 'center' },
   connectionLabel: { color: colors.accent, fontFamily: fonts.medium, fontSize: 12 },
   connectionButton: { marginTop: 28, minHeight: 52, borderRadius: 13, backgroundColor: colors.accent, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   connectionButtonText: { color: colors.white, fontFamily: fonts.medium, fontSize: 14 },
@@ -167,13 +167,10 @@ const styles = StyleSheet.create({
   connectButton: { minHeight: 38, paddingHorizontal: 13, borderRadius: 12, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
   connectDisabled: { opacity: 0.5 }, connectText: { color: colors.white, fontFamily: fonts.medium, fontSize: 12 },
   personStatus: { color: colors.muted, fontFamily: fonts.medium, fontSize: 12 },
-  smallAvatar: { width: 44, height: 44, borderRadius: 16, backgroundColor: colors.lilac, alignItems: 'center', justifyContent: 'center' },
-  smallAvatarText: { color: colors.ink, fontFamily: fonts.medium, fontSize: 18 },
   personText: { flex: 1 }, personName: { color: colors.ink, fontFamily: fonts.medium, fontSize: 15 },
   more: { alignItems: 'center', paddingVertical: 15 }, back: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 28 },
   backText: { fontFamily: fonts.medium, color: colors.ink, fontSize: 15 }, detail: { alignItems: 'flex-start' },
-  avatar: { width: 74, height: 74, borderRadius: 37, backgroundColor: colors.lilac, alignItems: 'center', justifyContent: 'center', marginBottom: 18 },
-  avatarText: { color: colors.ink, fontFamily: fonts.display, fontSize: 29 },
+  detailAvatar: { marginBottom: 18 },
   detailName: { color: colors.ink, fontFamily: fonts.display, fontSize: 28 },
   bio: { color: colors.ink, fontFamily: fonts.body, fontSize: 15, lineHeight: 22, marginTop: 24 },
   interests: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 20 },
