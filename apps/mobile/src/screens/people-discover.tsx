@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { router, useScrollToTop } from 'expo-router';
 import { ReactNode, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -10,11 +10,10 @@ import { PersonCard } from '@/components/person-card';
 import { Pill } from '@/components/pill';
 import { Screen } from '@/components/screen';
 import { Title } from '@/components/title';
-import { acceptConnection, Connection, requestConnection } from '@/lib/connections-api';
+import { Connection } from '@/lib/connections-api';
 import { searchPeople } from '@/lib/people-api';
 import { Profile } from '@/lib/profile-api';
-import { useConnections, usePullRefresh } from '@/lib/queries';
-import { success } from '@/lib/haptics';
+import { useConnectionAction, useConnections, usePullRefresh } from '@/lib/queries';
 import { groupConnections, retryUnlessExpired, uniqueById } from '@/lib/selectors';
 import { useSession, useSignOutOnExpiry } from '@/lib/session';
 import { accent, colors, fonts } from '@/theme';
@@ -24,7 +23,6 @@ type Row = { key: string; person: Profile; status?: Connection['status'] };
 
 export function PeopleDiscover() {
   const { apiUrl, userId, getToken, profile } = useSession();
-  const queryClient = useQueryClient();
   const [searching, setSearching] = useState(false);
   const [draft, setDraft] = useState('');
   const [query, setQuery] = useState('');
@@ -44,12 +42,8 @@ export function PeopleDiscover() {
     retry: retryUnlessExpired,
   });
   const connections = useConnections();
-  const connect = useMutation({
-    mutationFn: ({ kind, id }: { kind: 'request' | 'accept'; id: string }) =>
-      kind === 'request' ? requestConnection(apiUrl, getToken, id) : acceptConnection(apiUrl, getToken, id),
-    onSuccess: () => { success(); return queryClient.invalidateQueries({ queryKey: ['connections', userId] }); },
-  });
-  useSignOutOnExpiry(people.error, connect.error);
+  const connect = useConnectionAction();
+  useSignOutOnExpiry(people.error);
 
   const statusOf = (id: string) => connections.data?.find((item) => item.other.id === id)?.status;
   const { incoming, circle } = groupConnections(connections.data);
@@ -80,13 +74,22 @@ export function PeopleDiscover() {
     {!!connect.error && <Text accessibilityRole="alert" style={styles.error}>{connect.error.message}</Text>}
     {!query && <>
       {incoming.map(({ other }) => <Pressable key={other.id} accessibilityRole="button" accessibilityLabel={`${other.displayName} wants to connect. Open profile`}
-        accessibilityActions={[{ name: 'accept', label: `Accept ${other.displayName}` }]} onAccessibilityAction={(event) => { if (event.nativeEvent.actionName === 'accept' && !blocked) act(other.id); }}
+        accessibilityActions={[{ name: 'accept', label: `Accept ${other.displayName}` }, { name: 'decline', label: `Decline ${other.displayName}` }]}
+        onAccessibilityAction={(event) => {
+          if (blocked) return;
+          if (event.nativeEvent.actionName === 'accept') act(other.id);
+          if (event.nativeEvent.actionName === 'decline') connect.mutate({ kind: 'remove', id: other.id });
+        }}
         onPress={() => router.push(`/person/${other.id}`)} style={styles.request}>
         <Avatar name={other.displayName} imageUrl={other.imageUrl} size={46} ring={tint} />
         <View style={styles.flex}>
           <Text style={styles.name} numberOfLines={1}>{other.displayName}</Text>
           <Text style={[styles.meta, { color: tint }]}>wants in</Text>
         </View>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Decline ${other.displayName}`} hitSlop={6} disabled={blocked}
+          onPress={() => connect.mutate({ kind: 'remove', id: other.id })} style={[styles.decline, blocked && styles.dim]}>
+          <Ionicons name="close" size={18} color={colors.mute} />
+        </Pressable>
         <Pill label="accept" color={tint} disabled={blocked} onPress={() => act(other.id)} accessibilityLabel={`Accept ${other.displayName}`} />
       </Pressable>)}
       {people.isPending ? <ActivityIndicator color={tint} style={styles.loading} /> :
@@ -145,6 +148,7 @@ const styles = StyleSheet.create({
   cards: { gap: 10, paddingHorizontal: 16, paddingVertical: 12 },
   plus: { width: 46, height: 46, borderRadius: 23, backgroundColor: tint, alignItems: 'center', justifyContent: 'center' },
   dim: { opacity: 0.4 },
+  decline: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.surface2, alignItems: 'center', justifyContent: 'center' },
   sectionHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 4 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 10, minHeight: 64 },
 });

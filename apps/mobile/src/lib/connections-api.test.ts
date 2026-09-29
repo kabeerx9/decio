@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { acceptConnection, fetchConnections, requestConnection } from './connections-api';
+import { acceptConnection, fetchConnections, removeConnection, requestConnection } from './connections-api';
 import { SessionExpiredError } from './profile-api';
 
 test('connection list sends the session and preserves incoming state', async () => {
@@ -43,4 +43,20 @@ test('connection writes stop on expired sessions and show a duplicate conflict',
   assert.equal(called, false);
   await assert.rejects(requestConnection('http://localhost:8080', async () => 'token', 'other', async () => new Response(null, { status: 409 })), /already/);
   await assert.rejects(requestConnection('http://localhost:8080', async () => 'token', 'other', async () => new Response(null, { status: 400 })), /Complete your profile/);
+});
+
+test('remove deletes the pending request with the other user', async () => {
+  const calls: string[] = [];
+  await removeConnection('http://localhost:8080/', async () => 'token', 'user/2', async (url, options) => {
+    assert.equal(new Headers(options?.headers).get('Authorization'), 'Bearer token');
+    calls.push(`${options?.method} ${url}`);
+    return new Response(null, { status: 204 });
+  });
+  assert.deepEqual(calls, ['DELETE http://localhost:8080/v1/connections/user%2F2']);
+});
+
+test('remove treats an already-gone request as done and surfaces real failures', async () => {
+  await removeConnection('http://localhost:8080', async () => 'token', 'other', async () => new Response(null, { status: 404 }));
+  await assert.rejects(removeConnection('http://localhost:8080', async () => 'token', 'other', async () => new Response(null, { status: 401 })), SessionExpiredError);
+  await assert.rejects(removeConnection('http://localhost:8080', async () => 'token', 'other', async () => new Response(null, { status: 500 })), /Could not remove/);
 });

@@ -22,6 +22,8 @@ type fakeProfiles struct {
 	connectionRequester string
 	connectionRecipient string
 	connectionResult    []domain.Connection
+	removedBy           string
+	removedOther        string
 	messageResult       domain.DirectMessage
 	messagePage         domain.MessagePage
 	messageOtherID      string
@@ -169,6 +171,11 @@ func (f *fakeProfiles) RequestConnection(_ context.Context, requesterID, recipie
 
 func (f *fakeProfiles) AcceptConnection(_ context.Context, recipientID, requesterID string) error {
 	f.connectionRequester, f.connectionRecipient = requesterID, recipientID
+	return f.err
+}
+
+func (f *fakeProfiles) RemovePendingConnection(_ context.Context, userID, otherID string) error {
+	f.removedBy, f.removedOther = userID, otherID
 	return f.err
 }
 

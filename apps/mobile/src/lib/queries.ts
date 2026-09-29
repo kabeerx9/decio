@@ -1,7 +1,8 @@
-import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 
-import { fetchConnections } from './connections-api';
+import { acceptConnection, fetchConnections, removeConnection, requestConnection } from './connections-api';
+import { success, tick } from './haptics';
 import { fetchCityPosts } from './posts-api';
 import { completeOnboarding, Profile, ProfileInput, saveMyProfile, SessionExpiredError, syncProfileImage } from './profile-api';
 import { retryUnlessExpired } from './selectors';
@@ -12,6 +13,24 @@ export function useConnections() {
   const query = useQuery({ queryKey: ['connections', userId], queryFn: () => fetchConnections(apiUrl, getToken), retry: retryUnlessExpired });
   useSignOutOnExpiry(query.error);
   return query;
+}
+
+export type ConnectionAction = { kind: 'request' | 'accept' | 'remove'; id: string };
+
+// Every connection write refetches the list when it settles, including on error:
+// a 404 means this device's list was stale, and the refetch is the fix.
+export function useConnectionAction() {
+  const { apiUrl, userId, getToken } = useSession();
+  const queryClient = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: ({ kind, id }: ConnectionAction) =>
+      kind === 'request' ? requestConnection(apiUrl, getToken, id) :
+        kind === 'accept' ? acceptConnection(apiUrl, getToken, id) : removeConnection(apiUrl, getToken, id),
+    onSuccess: (_, { kind }) => { if (kind === 'remove') tick(); else success(); },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['connections', userId] }),
+  });
+  useSignOutOnExpiry(mutation.error);
+  return mutation;
 }
 
 export function useCityFeed() {

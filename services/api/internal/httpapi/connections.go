@@ -16,6 +16,7 @@ import (
 type ConnectionStore interface {
 	RequestConnection(ctx context.Context, requesterID, recipientID string) error
 	AcceptConnection(ctx context.Context, recipientID, requesterID string) error
+	RemovePendingConnection(ctx context.Context, userID, otherID string) error
 	ListConnections(ctx context.Context, userID string) ([]domain.Connection, error)
 }
 
@@ -99,6 +100,29 @@ func registerConnectionRoutes(mux *http.ServeMux, store ConnectionStore, realtim
 			http.Error(w, "pending request not found", http.StatusNotFound)
 		case err != nil:
 			log.Printf("accept connection: %v", err)
+			http.Error(w, "connection unavailable", http.StatusInternalServerError)
+		default:
+			w.WriteHeader(http.StatusNoContent)
+		}
+	})))
+	mux.Handle("DELETE /v1/connections/{id}", authenticate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		id, ok := userID(r.Context())
+		if !ok {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		otherID := r.PathValue("id")
+		if otherID == "" || len(otherID) > 256 || otherID == id {
+			http.Error(w, "invalid user", http.StatusBadRequest)
+			return
+		}
+		err := connections.Remove(r.Context(), id, otherID)
+		switch {
+		case errors.Is(err, domain.ErrConnectionNotFound):
+			http.Error(w, "pending request not found", http.StatusNotFound)
+		case err != nil:
+			log.Printf("remove connection: %v", err)
 			http.Error(w, "connection unavailable", http.StatusInternalServerError)
 		default:
 			w.WriteHeader(http.StatusNoContent)

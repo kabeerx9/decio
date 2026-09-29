@@ -53,6 +53,23 @@ func (s *Store) AcceptConnection(ctx context.Context, recipientID, requesterID s
 	return err
 }
 
+// RemovePendingConnection deletes a pending request from either side of the
+// pair: the requester unsends it or the recipient declines it. The status
+// guard makes this lose cleanly to a concurrent accept.
+func (s *Store) RemovePendingConnection(ctx context.Context, userID, otherID string) error {
+	result, err := s.pool.Exec(ctx, `
+		DELETE FROM connections
+		WHERE user_low = LEAST($1, $2) AND user_high = GREATEST($1, $2) AND status = 'pending'
+	`, userID, otherID)
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() == 0 {
+		return domain.ErrConnectionNotFound
+	}
+	return nil
+}
+
 // ListConnections projects each relationship from the current user's side.
 func (s *Store) ListConnections(ctx context.Context, userID string) ([]domain.Connection, error) {
 	rows, err := s.pool.Query(ctx, `

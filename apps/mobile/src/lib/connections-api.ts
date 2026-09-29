@@ -55,3 +55,15 @@ export async function acceptConnection(apiUrl: string, getToken: GetToken, reque
   if (response.status === 404) throw new Error('This request is no longer pending.');
   if (!response.ok) throw new Error('Could not accept the request. Please try again.');
 }
+
+// Unsends or declines a pending request. A 404 means the list was stale (already
+// removed or accepted); the caller refetches either way, so it is not an error.
+export async function removeConnection(apiUrl: string, getToken: GetToken, otherID: string, request: typeof fetch = fetch): Promise<void> {
+  const token = await sessionToken(getToken);
+  const response = await retryOn401(getToken, request)(`${apiUrl.replace(/\/$/, '')}/v1/connections/${encodeURIComponent(otherID)}`, {
+    method: 'DELETE', headers: { Authorization: `Bearer ${token}` },
+  });
+  if (response.status === 401 || response.status === 403) throw new SessionExpiredError();
+  if (response.status === 404) return;
+  if (!response.ok) throw new Error('Could not remove the request. Please try again.');
+}

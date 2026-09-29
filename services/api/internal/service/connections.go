@@ -9,6 +9,7 @@ import (
 type ConnectionStore interface {
 	RequestConnection(ctx context.Context, requesterID, recipientID string) error
 	AcceptConnection(ctx context.Context, recipientID, requesterID string) error
+	RemovePendingConnection(ctx context.Context, userID, otherID string) error
 }
 
 type ConnectionPublisher interface {
@@ -37,6 +38,16 @@ func (s *Connections) Accept(ctx context.Context, recipientID, requesterID strin
 		return err
 	}
 	s.publish(ctx, recipientID, requesterID)
+	return nil
+}
+
+// Remove unsends or declines a pending request. The other user gets the same
+// silent list refresh either way.
+func (s *Connections) Remove(ctx context.Context, userID, otherID string) error {
+	if err := s.store.RemovePendingConnection(ctx, userID, otherID); err != nil {
+		return err
+	}
+	s.publish(ctx, userID, otherID)
 	return nil
 }
 

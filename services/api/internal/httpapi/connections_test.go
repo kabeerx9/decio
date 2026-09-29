@@ -71,3 +71,30 @@ func TestConnectionRoutesUseVerifiedIdentityAndMapStateErrors(t *testing.T) {
 		t.Fatalf("list status=%d body=%s", response.Code, response.Body.String())
 	}
 }
+
+func TestRemoveConnectionUsesVerifiedIdentityAndMapsMissingToNotFound(t *testing.T) {
+	profiles := &fakeProfiles{}
+	server := NewHandler(profiles, testAuth, nil)
+	remove := func(path, auth string) int {
+		r := httptest.NewRequest(http.MethodDelete, path, nil)
+		if auth != "" {
+			r.Header.Set("Authorization", auth)
+		}
+		response := httptest.NewRecorder()
+		server.ServeHTTP(response, r)
+		return response.Code
+	}
+	if status := remove("/v1/connections/other", ""); status != http.StatusUnauthorized || profiles.removedBy != "" {
+		t.Fatalf("remove without session: status=%d removedBy=%q", status, profiles.removedBy)
+	}
+	if status := remove("/v1/connections/user_from_verified_token", "Bearer good-session"); status != http.StatusBadRequest || profiles.removedBy != "" {
+		t.Fatalf("self remove: status=%d", status)
+	}
+	if status := remove("/v1/connections/other", "Bearer good-session"); status != http.StatusNoContent || profiles.removedBy != "user_from_verified_token" || profiles.removedOther != "other" {
+		t.Fatalf("remove status=%d by=%q other=%q", status, profiles.removedBy, profiles.removedOther)
+	}
+	profiles.err = domain.ErrConnectionNotFound
+	if status := remove("/v1/connections/other", "Bearer good-session"); status != http.StatusNotFound {
+		t.Fatalf("no pending request status=%d", status)
+	}
+}

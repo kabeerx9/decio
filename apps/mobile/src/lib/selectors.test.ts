@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import type { Connection } from './connections-api';
 import type { CityPost, PostPage } from './posts-api';
 import { Profile, SessionExpiredError } from './profile-api';
-import { connectionBadges, findCachedPost, groupConnections, readMarkerToSend, retryUnlessExpired, uniqueById, unreadIncreased } from './selectors';
+import { connectionBadges, findCachedPost, groupConnections, readMarkerToSend, retryUnlessExpired, splitConnections, uniqueById, unreadIncreased } from './selectors';
 
 const person = (id: string): Profile => ({ id, displayName: id, city: 'Pune', bio: '', headline: '', interests: [], imageUrl: '', onboardingComplete: true });
 const connection = (id: string, status: Connection['status'], unreadCount = 0): Connection => ({ other: person(id), status, unreadCount });
@@ -26,6 +26,14 @@ test('groupConnections separates incoming requests and orders the circle accepte
   const { incoming, circle } = groupConnections([connection('s', 'sent'), connection('i', 'incoming'), connection('a', 'accepted')]);
   assert.deepEqual(incoming.map((item) => item.other.id), ['i']);
   assert.deepEqual(circle.map((item) => item.other.id), ['a', 's']);
+});
+
+test('splitConnections keeps server order within connected, incoming and sent', () => {
+  const split = splitConnections([connection('s1', 'sent'), connection('a1', 'accepted'), connection('i1', 'incoming'), connection('a2', 'accepted'), connection('s2', 'sent')]);
+  assert.deepEqual(split.connected.map((item) => item.other.id), ['a1', 'a2']);
+  assert.deepEqual(split.incoming.map((item) => item.other.id), ['i1']);
+  assert.deepEqual(split.sent.map((item) => item.other.id), ['s1', 's2']);
+  assert.deepEqual(splitConnections(undefined), { connected: [], incoming: [], sent: [] });
 });
 
 test('findCachedPost searches every cached page and reports a miss', () => {

@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/kabeerx9/decio/services/api/internal/domain"
 )
 
 type fakeRealtime struct {
@@ -80,5 +82,19 @@ func TestConnectionWritesPublishForBothUsersOnlyAfterSuccess(t *testing.T) {
 	store.err = nil
 	if status := request("/v1/connections/other/accept", ""); status != http.StatusNoContent || len(fake.published) != 4 || fake.published[2] != "user_from_verified_token" || fake.published[3] != "other" {
 		t.Fatalf("accepted request: status=%d publishes=%v", status, fake.published)
+	}
+	remove := func() int {
+		r := httptest.NewRequest(http.MethodDelete, "/v1/connections/other", nil)
+		r.Header.Set("Authorization", "Bearer good-session")
+		w := httptest.NewRecorder()
+		server.ServeHTTP(w, r)
+		return w.Code
+	}
+	if status := remove(); status != http.StatusNoContent || len(fake.published) != 6 || fake.published[4] != "user_from_verified_token" || fake.published[5] != "other" {
+		t.Fatalf("removed request: status=%d publishes=%v", status, fake.published)
+	}
+	store.err = domain.ErrConnectionNotFound
+	if status := remove(); status != http.StatusNotFound || len(fake.published) != 6 {
+		t.Fatalf("missing request must not publish: status=%d publishes=%v", status, fake.published)
 	}
 }

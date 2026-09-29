@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -8,10 +8,8 @@ import { Cover } from '@/components/cover';
 import { EmptyState } from '@/components/empty-state';
 import { Pill } from '@/components/pill';
 import { Screen } from '@/components/screen';
-import { acceptConnection, requestConnection } from '@/lib/connections-api';
-import { success } from '@/lib/haptics';
 import { fetchPublicProfile } from '@/lib/people-api';
-import { useConnections } from '@/lib/queries';
+import { useConnectionAction, useConnections } from '@/lib/queries';
 import { retryUnlessExpired } from '@/lib/selectors';
 import { useSession, useSignOutOnExpiry } from '@/lib/session';
 import { accent, colors, fonts } from '@/theme';
@@ -20,14 +18,10 @@ const tint = accent.people;
 
 export function PersonScreen({ id }: { id: string }) {
   const { apiUrl, userId, getToken } = useSession();
-  const queryClient = useQueryClient();
   const person = useQuery({ queryKey: ['publicProfile', userId, id], queryFn: () => fetchPublicProfile(apiUrl, getToken, id), retry: retryUnlessExpired });
   const connections = useConnections();
-  const connect = useMutation({
-    mutationFn: (kind: 'request' | 'accept') => kind === 'request' ? requestConnection(apiUrl, getToken, id) : acceptConnection(apiUrl, getToken, id),
-    onSuccess: () => { success(); return queryClient.invalidateQueries({ queryKey: ['connections', userId] }); },
-  });
-  useSignOutOnExpiry(person.error, connect.error);
+  const connect = useConnectionAction();
+  useSignOutOnExpiry(person.error);
 
   if (!person.data) return <Screen edges={['top', 'bottom']}>
     <BackHeader title="" />
@@ -40,9 +34,10 @@ export function PersonScreen({ id }: { id: string }) {
   const action = connections.isPending ? <ActivityIndicator color={tint} /> :
     connections.error ? <Pill label="retry status" onPress={() => void connections.refetch()} /> :
       status === 'accepted' ? <Pill label="message" icon="chatbubble" color={tint} onPress={() => router.push(`/chat/${id}`)} /> :
-        status === 'sent' ? <Pill label="request sent" disabled /> :
+        status === 'sent' ? <Pill label="unsend" busy={connect.isPending} accessibilityLabel={`Unsend request to ${person.data.displayName}`}
+          onPress={() => connect.mutate({ kind: 'remove', id })} /> :
           <Pill label={status === 'incoming' ? 'accept' : 'connect'} color={tint} busy={connect.isPending}
-            onPress={() => connect.mutate(status === 'incoming' ? 'accept' : 'request')} />;
+            onPress={() => connect.mutate({ kind: status === 'incoming' ? 'accept' : 'request', id })} />;
 
   return <Screen edges={['bottom']}>
     <ScrollView contentContainerStyle={styles.content}>

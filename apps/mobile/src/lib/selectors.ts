@@ -28,6 +28,15 @@ export function groupConnections(connections: Connection[] | undefined): { incom
   };
 }
 
+// One pass shared by the You stats and the connections screen so their counts agree.
+export function splitConnections(connections: Connection[] | undefined): { connected: Connection[]; incoming: Connection[]; sent: Connection[] } {
+  const split = { connected: [] as Connection[], incoming: [] as Connection[], sent: [] as Connection[] };
+  for (const item of connections ?? []) {
+    (item.status === 'accepted' ? split.connected : item.status === 'incoming' ? split.incoming : split.sent).push(item);
+  }
+  return split;
+}
+
 export function findCachedPost(data: InfiniteData<PostPage> | undefined, id: string): CityPost | undefined {
   return data?.pages.flatMap((page) => page.posts).find((post) => post.id === id);
 }
